@@ -1,8 +1,6 @@
 """AstrBot plugin: LoL Notifier
 
-The plugin keeps the same shape as the original F1 version: one command group,
-small sub-command handlers, a shared result/result-image helper, and a
-background scheduler for subscriptions.
+Provides LoL esports push notifications and on-demand query commands.
 
 Commands (prefix /lol):
     /lol help
@@ -35,32 +33,31 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
 
 查询命令：
   /lol schedule [lck|lpl] [regular|playoff] [season]
-      近期赛程（默认最近 5 场/站，按赛区与赛段筛选）
-    /lol next [lck|lpl] [regular|playoff] [season]
-            下一场完整时间表（默认最新一场之后的下一场）
+      近期赛程（默认最近 5 场，按赛区与赛段筛选）
+  /lol next [lck|lpl] [regular|playoff] [season]
+      下一场完整时间表
   /lol result [lck|lpl] [regular|playoff] [round]
-      比赛结果（默认最近一场，可指定场次）
+      比赛结果（默认最近一场）
   /lol bp [lck|lpl] [regular|playoff] [round]
-      单局 BP（默认最近一场，可指定场次）
+      单局 BP（默认最近一场）
   /lol detail [lck|lpl] [regular|playoff] [round]
-      比赛详细信息（默认最近一场，可指定场次）
+      比赛详细信息（默认最近一场）
   /lol standings [lck|lpl] [regular|playoff] [season]
       排名 / 积分榜
 
 管理命令：
-  /lol subscribe
-      订阅当前会话的自动推送
-  /lol unsubscribe
-      取消当前会话的自动推送
-  /lol test [season]
-      测试插件各项查询功能（默认 current）
+  /lol subscribe     订阅当前会话的自动推送
+  /lol unsubscribe   取消当前会话的自动推送
+  /lol test [season] 测试插件各项查询功能
 
-自动推送：
-  • 赛程提醒
-  • 比赛结果
-  • 单局 BP
-  • 比赛详细信息
-  • 排名 / 积分榜
+自动推送场景（订阅后自动触发）：
+  ⏰ 距比赛日 ≤ 24小时  →  当日赛程 + 对阵表 + 双方战队海报
+  🔍 比赛前 30 分钟     →  首发名单 + 历史交手 + 赛前预测 + 双方海报
+  🧠 每小局 BP 结束后   →  格式化阵容名单（我方/对方替换为战队名）
+  📊 每小局结束后       →  简要胜负 + 比赛战报 & 图片
+  🏆 比赛结束后         →  最终比分 + MVP/FMVP + B站回放视频
+  📺 B站官号更新        →  全量自动推送动态/视频/直播
+  🏅 淘汰赛关键节点     →  晋级/淘汰情况 + 后续对阵
 """
 
 
