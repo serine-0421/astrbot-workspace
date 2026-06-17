@@ -1,58 +1,143 @@
-# astrbot_plugin_lol_notifier
+# 🎮 LoL Notifier — AstrBot 赛事推送与查询插件
 
-🎮 **LoL Notifier** — AstrBot 的 LCK / LPL 赛事推送与查询插件
-
-当前版本已经完成插件结构迁移：命令、模型、格式化、图片渲染和调度器骨架都已切换为 LoL 赛事语义。后续只需要在 `src/astrbot_plugin_lol_notifier/api.py` 接入真实数据源，即可继续扩展自动推送与详细赛事查询能力。
+LCK / LPL 英雄联盟赛事自动推送 + 手动词条查询，集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 ---
 
-## 功能方向
+## 已实现功能
 
-### 查询命令
+### ✅ 第三方平台自动推送
 
-所有指令以 `/lol` 开头：
+| 触发源 | 账号 | 推送内容 | 开关配置 |
+|--------|------|----------|----------|
+| **B 站 LOL 官号** | UID `50329118` | 最新视频投稿（标题 / BV 号 / 封面 / 链接） | `enable_bilibili_video_push` |
+| **B 站 BLG 官号** | UID `545271146` | 含 "BP" 关键词的图文动态（文案 + 图片 URL） | `enable_bilibili_blg_bp_push` |
+| **微博各队官号** | 可配置 UID 列表 | LPL + 预告 赛前海报（匹配含 "LPL" 和 "预告" 的帖子） | `enable_weibo_poster_push` |
 
-| 指令 | 说明 |
-|---|---|
-| `/lol help` | 显示帮助信息 |
-| `/lol schedule [lck|lpl] [regular|playoff] [season]` | 赛程查询 |
-| `/lol next [lck|lpl] [regular|playoff] [season]` | 下一场完整时间表 |
-| `/lol result [lck|lpl] [regular|playoff] [round]` | 比赛结果 |
-| `/lol bp [lck|lpl] [regular|playoff] [round]` | 单局 BP |
-| `/lol detail [lck|lpl] [regular|playoff] [round]` | 比赛详细信息 |
-| `/lol standings [lck|lpl] [regular|playoff] [season]` | 排名 / 积分榜 |
-| `/lol subscribe` | 订阅当前会话的自动推送 |
-| `/lol unsubscribe` | 取消当前会话的自动推送 |
-| `/lol test [season]` | 测试当前插件骨架 |
+> 推送间隔：B 站 60 秒，微博 300 秒。首次启动静默记录已有内容，不会刷屏。
 
-### 后续推送方向
+### 🚧 赛事数据推送（框架就绪，待接入数据源）
 
 | 触发时机 | 推送内容 |
-|---|---|
-| 常规赛 / 淘汰赛开赛前 | 赛程提醒 |
-| 比赛结束后 | 比赛结果 |
-| 每局结束后 | 单局 BP |
-| 关键对局结束后 | 比赛详细信息 |
-| 赛季进行中 | 排名 / 积分榜 |
+|----------|----------|
+| ⏰ 距比赛日 ≤ 24 小时 | 当日赛程 + 对阵表 + 双方战队海报 |
+| 🔍 比赛前 30 分钟 | 首发名单 + 历史交手 + 赛前预测 + 双方海报 |
+| 🧠 每小局 BP 结束后 | 格式化阵容名单 |
+| 📊 每小局结束后 | 简要胜负 + 战报图片 |
+| 🏆 比赛结束后 | 最终比分 + MVP / FMVP + B 站回放视频 |
+| 🏅 淘汰赛关键节点 | 晋级/淘汰情况 + 后续对阵 |
+
+---
+
+## 指令列表
+
+所有指令以 `/lol` 为前缀。`[]` 内为可选参数，不填时使用默认值。
+
+### 📋 查询命令
+
+| 指令 | 说明 | 示例 |
+|------|------|------|
+| `/lol help` | 显示完整帮助 | `/lol help` |
+| `/lol schedule [lck\|lpl] [regular\|playoff] [season]` | 近期赛程（默认最近 5 场） | `/lol schedule lpl regular 2024` |
+| `/lol next [lck\|lpl] [regular\|playoff] [season]` | 下一场比赛完整时间表 | `/lol next lck playoff` |
+| `/lol result [lck\|lpl] [regular\|playoff] [round]` | 比赛结果（round 为空 = 最近一场） | `/lol result lpl regular 3` |
+| `/lol bp [lck\|lpl] [regular\|playoff] [round]` | 单局 BP 阵容 | `/lol bp lck playoff 1` |
+| `/lol detail [lck\|lpl] [regular\|playoff] [round]` | 比赛详细信息 | `/lol detail lpl regular last` |
+| `/lol standings [lck\|lpl] [regular\|playoff] [season]` | 排名 / 积分榜 | `/lol standings lck regular 2024` |
+
+### ⚙️ 管理命令
+
+| 指令 | 说明 |
+|------|------|
+| `/lol subscribe` | 订阅当前群聊/私聊的自动推送 |
+| `/lol unsubscribe` | 取消当前会话的自动推送 |
+| `/lol test [season]` | 测试插件各项查询功能是否正常 |
+
+---
+
+## 配置项
+
+在 AstrBot 后台 → 插件管理 → LoL Notifier → 配置 中修改，或直接编辑 `_conf_schema.json`。
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `bilibili_uid` | string | `"50329118"` | B 站 LOL 赛事官号 UID |
+| `enable_bilibili_video_push` | bool | `true` | 开启 LOL 官号视频推送 |
+| `bilibili_blg_uid` | string | `"545271146"` | BLG 电子竞技俱乐部 B 站 UID |
+| `enable_bilibili_blg_bp_push` | bool | `true` | 开启 BLG BP 图文动态推送 |
+| `bilibili_check_interval` | int | `60` | B 站轮询间隔（秒） |
+| `weibo_uids` | list | `["6537214902"]` | 微博监控账号 UID 列表 |
+| `enable_weibo_poster_push` | bool | `true` | 开启微博赛前海报推送 |
+| `weibo_check_interval` | int | `300` | 微博轮询间隔（秒，建议 ≥ 5 分钟） |
+| `weibo_cookie` | string | `""` | 微博登录 Cookie（可选，提高 API 稳定性） |
+| `enable_image_render` | bool | `false` | 开启图片渲染模式（需 Pillow） |
+| `enable_match_notifications` | bool | `true` | 开启赛事相关推送 |
+
+> **微博 UID 获取方法**：打开目标用户微博主页，URL 中的数字即为 UID。例如 `https://weibo.com/u/6537214902` → UID 为 `6537214902`。
+
+---
+
+## 架构
+
+```
+main.py                          ← AstrBot 插件入口，注册命令 + 启动调度器
+src/astrbot_plugin_lol_notifier/
+├── config.py                    ← 配置读取（B 站 UID、微博 UID、推送开关）
+├── state.py                     ← 去重状态管理（已推送的视频/动态/帖子 ID）
+├── scheduler.py                 ← 9 种推送时机调度 + 广播
+├── api.py                       ← 赛事数据 API 统一入口（待接入）
+├── models.py                    ← 数据模型（LeagueMatch / MatchGame / StandingEntry）
+├── utils.py                     ← 通用工具（赛区名称规范化）
+├── image_renderer.py            ← Pillow 图片渲染
+├── fetcher/
+│   ├── api.py                   ← 赛事数据获取层骨架
+│   ├── bilibili.py              ← B 站 LOL 官号视频抓取（公开 API + WBI 签名双方案）
+│   ├── bilibili_dynamic.py      ← B 站 BLG 官号图文动态抓取（type=DRAW + "BP" 关键词）
+│   └── weibo.py                 ← 微博 m.weibo.cn 移动端 API 海报抓取
+├── formatter/
+│   ├── message.py               ← 文本格式化（视频 / 海报 / BP / 赛程 / 结果 等）
+│   └── card.py                  ← 图片卡片样式渲染
+└── tests/
+    └── test_fixes.py            ← 31 个冒烟测试
+```
+
+### 抓取器设计
+
+- **B 站视频** (`bilibili.py`)：优先公开 API → 限频时自动降级 WBI 签名，首次运行记录已有视频不推送，后续只推送 180s 内的新视频
+- **B 站 BLG 动态** (`bilibili_dynamic.py`)：调用 `x/polymer/web-dynamic/v1/feed/space` 接口，仅保留 `DYNAMIC_TYPE_DRAW`（图文）+ 包含 "BP" 的条目
+- **微博海报** (`weibo.py`)：调用 `m.weibo.cn/api/container/getIndex` 移动端接口，去 HTML 标签后用 "LPL" + "预告" 双关键词匹配，提取图片 URL
 
 ---
 
 ## 安装
 
-在 AstrBot 插件管理页面中搜索 `astrbot_plugin_lol_notifier` 并安装，或手动克隆本仓库到插件目录：
+### 方法一：AstrBot 插件市场
+
+在 AstrBot 管理面板 → 插件管理 → 搜索 `astrbot_plugin_lol_notifier` → 安装。
+
+### 方法二：手动安装
 
 ```bash
+# 进入 AstrBot 插件目录
+cd AstrBot/addons/plugins/
 git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier
 ```
 
+安装后在 AstrBot 管理面板启用插件即可。发送 `/lol help` 验证是否正常工作。
+
 ---
 
-## 说明
+## 后续接入指南
 
-当前代码已完成结构替换，但还没有接入真实的 LCK / LPL 数据源。你接下来可以把赛事数据提供方式补进 `src/astrbot_plugin_lol_notifier/api.py`，其余层已经按这个目标预留好了接口。
+赛事数据模块（`api.py` / `fetcher/api.py`）当前返回 `"LoL 数据源尚未接入"`。要启用完整赛事推送：
 
-## 在 AstrBot 中运行
+1. 在 `fetcher/api.py` 中实现 `get_schedule`、`get_match_result`、`get_match_bp`、`get_match_detail`、`get_standings` 五个函数
+2. 所有函数返回 `Success[list[LeagueMatch]] | Failure` 类型
+3. 接入后可选的赛事数据来源：PandaScore API、Bayesesports、官方赛事 API 等
 
-1. 将整个外层仓库目录放到 AstrBot 的插件目录中，确保外层 [main.py](main.py) 和内层 [astrbot_plugin_lol-master/main.py](astrbot_plugin_lol-master/main.py) 都保留。
-2. 在 AstrBot 管理界面启用插件后，使用 `/lol help` 查看命令。
-3. 后续如果要接入真实赛事数据，只需要继续扩展 [src/astrbot_plugin_lol_notifier/api.py](src/astrbot_plugin_lol_notifier/api.py)。
+---
+
+## License
+
+MIT License — 详见 [LICENSE](LICENSE)
+
