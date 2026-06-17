@@ -1,4 +1,16 @@
-"""Background scheduler for LoL notifications."""
+"""Background scheduler for LoL notifications.
+
+推送场景：
+  1. B站 LOL官号 (UID 50329118) → 视频更新
+  2. 微博各队官号 → 赛前海报 (LPL+预告关键词)
+  3. B站 BLG官号 (UID 545271146) → BP图文动态
+  4. 距比赛日 ≤ 24h → 赛程 + 对阵表 + 海报
+  5. 赛前 30min → 首发名单 + 交手记录 + 预测
+  6. 每小局 BP 结束 → 阵容名单
+  7. 每小局结束 → 胜负 + 战报
+  8. 比赛结束 → 最终比分 + MVP + 回放
+  9. 淘汰赛关键节点 → 晋级/淘汰
+"""
 
 from __future__ import annotations
 
@@ -10,8 +22,9 @@ from astrbot.api import logger
 from astrbot.api.message.components import Image, MessageChain, Plain
 
 from . import image_renderer as img
+from .config import get_blg_uid, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
 from .fetcher import api as fetcher_api
-from .fetcher import bilibili, weibo
+from .fetcher import bilibili, bilibili_dynamic, weibo
 from .formatter import message as formatter
 from .models import Failure, LeagueMatch, Success
 from .state import NotificationState, default_state
@@ -41,9 +54,13 @@ class LoLScheduler:
         self._loaded = False
         img.configure(config)
 
+    # ── 属性 ──
+
     @property
     def _image_mode(self) -> bool:
         return bool(self._config.get("enable_image_render", False)) if self._config else False
+
+    # ── 生命周期 ──
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -58,6 +75,8 @@ class LoLScheduler:
             except asyncio.CancelledError:
                 pass
             logger.info("[LoLNotifier] Scheduler stopped.")
+
+    # ── 订阅管理 ──
 
     async def add_subscriber(self, session: str) -> bool:
         if session not in self._subscribers:
@@ -78,6 +97,8 @@ class LoLScheduler:
 
     def subscriber_count(self) -> int:
         return len(self._subscribers)
+
+    # ── 持久化 ──
 
     async def _load(self) -> None:
         self._subscribers = await self._star.get_kv_data("lol_subscribers", []) or []
@@ -104,6 +125,7 @@ class LoLScheduler:
             "post_round_notice": self._state.post_round_notice,
             "elimination_updates": self._state.elimination_updates,
             "bilibili_updates": list(self._state.bilibili_updates),
+            "bilibili_bp_dynamics": list(self._state.bilibili_bp_dynamics),
             "weibo_updates": list(self._state.weibo_updates),
         }
         await self._star.put_kv_data("lol_state", state_dict)
@@ -124,31 +146,35 @@ class LoLScheduler:
     async def _check_and_notify(self) -> None:
         """主推送检查逻辑：按时机触发各类通知"""
         now = datetime.now(timezone.utc)
-        
-        # 1. 检查 B 站官号更新
-        await self._check_bilibili_updates()
-        
-        # 2. 检查微博官号更新
-        await self._check_weibo_updates()
-        
-        # 2. 获取赛程数据
+
+        # ═══ 第三方平台推送（独立于赛程数据） ═══
+
+        # 1. B站 LOL官号 → 视频更新
+        await self._check_bilibili_videos()
+
+        # 2. 微博各队官号 → 赛前海报 (LPL+预告)
+        await self._check_weibo_posters()
+
+        # 3. B站 BLG官号 → BP图文动态
+        await self._check_blg_bp_dynamics()
+
+        # ═══ 赛事数据推送（依赖赛程 API） ═══
+
         schedule_result = await fetcher_api.get_schedule("lck", "regular", "current")
         if isinstance(schedule_result, Failure):
             return
-        
+
         matches = schedule_result.value if schedule_result.value else []
         if not matches:
             return
-        
-        # 3. 检查各个推送时机
+
         for match in matches:
             await self._check_24h_before_match(match, now)
             await self._check_30min_before_match(match, now)
             await self._check_bp_finished(match, now)
             await self._check_round_finished(match, now)
             await self._check_match_finished(match, now)
-        
-        # 4. 检查淘汰赛关键节点
+
         await self._check_elimination_updates()
 
     async def _broadcast(self, text: str, image_path: str | None = None) -> None:
@@ -194,7 +220,8 @@ class LoLScheduler:
             time_until = (match_time - now).total_seconds()
             if 0 < time_until <= 86400:  # 24小时内
                 # 获取海报
-                posters = await weibo.fetch_weibo_posters()
+                uids = get_weibo_uids(self._config)
+                posters = await weibo.fetch_weibo_posters(uids) if uids else []
                 poster_text = "\n".join([p.get("url", "") for p in posters[:2]]) if posters else ""
                 
                 text = formatter.format_pre_match_preview(
@@ -228,7 +255,8 @@ class LoLScheduler:
             time_until = (match_time - now).total_seconds()
             if 0 < time_until <= 1800:  # 30分钟内
                 # 获取海报
-                posters = await weibo.fetch_weibo_posters()
+                uids = get_weibo_uids(self._config)
+                posters = await weibo.fetch_weibo_posters(uids) if uids else []
                 poster_text = "\n".join([p.get("url", "") for p in posters[:2]]) if posters else ""
                 
                 text = formatter.format_pre_match_preview(
@@ -324,59 +352,114 @@ class LoLScheduler:
             await self._persist_state()
             logger.info(f"[LoLNotifier] Sent match final result for {match_key}")
 
-    async def _check_bilibili_updates(self) -> None:
-        """B站官号更新：全量自动推送所有动态/视频"""
+    async def _check_bilibili_videos(self) -> None:
+        """B站 LOL官号 (UID 50329118)：推送最新视频投稿"""
         try:
             updates = await bilibili.fetch_bilibili_updates()
             if not updates:
                 return
-            
+
+            # 首次运行不推送，仅记录已有视频避免后续重复
+            if not self._state.bilibili_updates:
+                for item in updates:
+                    self._state.bilibili_updates.add(item.get("bvid", ""))
+                await self._persist_state()
+                logger.info(f"[LoLNotifier] Bilibili-video: first run, recorded {len(updates)} existing videos")
+                return
+
             new_updates = []
+            now_ts = int(datetime.now(timezone.utc).timestamp())
             for item in updates:
-                item_id = item.get("id") or item.get("bvid") or item.get("dynamic_id", "")
-                if item_id and item_id not in self._state.bilibili_updates:
-                    new_updates.append(item)
-                    self._state.bilibili_updates.add(item_id)
-            
+                bvid = item.get("bvid", "")
+                if not bvid or bvid in self._state.bilibili_updates:
+                    continue
+                pubdate = item.get("pubdate", 0)
+                if now_ts - pubdate > POLL_INTERVAL * 3:
+                    continue
+                new_updates.append(item)
+                self._state.bilibili_updates.add(bvid)
+
             if new_updates:
                 text = formatter.format_bilibili_update(new_updates)
                 await self._broadcast(text, None)
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] Sent {len(new_updates)} bilibili updates")
+                logger.info(f"[LoLNotifier] Sent {len(new_updates)} bilibili video(s)")
         except Exception as e:
-            logger.error(f"[LoLNotifier] Error checking bilibili: {e}")
+            logger.error(f"[LoLNotifier] Error checking bilibili videos: {e}")
 
-    async def _check_weibo_updates(self) -> None:
-        """微博官号更新：根据白名单/屏蔽词过滤后推送原创微博"""
+    # ── BLG BP 图文动态 ──
+
+    async def _check_blg_bp_dynamics(self) -> None:
+        """B站 BLG官号 (UID 545271146)：推送含"BP"的图文动态"""
+        if not is_blg_bp_push_enabled(self._config):
+            return
+
         try:
-            posts = await weibo.fetch_weibo_announcements()
-            if not posts:
+            dynamics = await bilibili_dynamic.fetch_blg_bp_dynamics()
+            if not dynamics:
                 return
 
-            new_posts = []
-            for post in posts:
+            # 首次运行仅记录
+            if not self._state.bilibili_bp_dynamics:
+                for item in dynamics:
+                    self._state.bilibili_bp_dynamics.add(item.get("dynamic_id", ""))
+                await self._persist_state()
+                logger.info(f"[LoLNotifier] BLG-BP: first run, recorded {len(dynamics)} existing dynamics")
+                return
+
+            new_items = []
+            for item in dynamics:
+                dyn_id = item.get("dynamic_id", "")
+                if not dyn_id or dyn_id in self._state.bilibili_bp_dynamics:
+                    continue
+                new_items.append(item)
+                self._state.bilibili_bp_dynamics.add(dyn_id)
+
+            if new_items:
+                text = formatter.format_bilibili_bp_update(new_items)
+                await self._broadcast(text, None)
+                await self._persist_state()
+                logger.info(f"[LoLNotifier] Sent {len(new_items)} BLG BP dynamic(s)")
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error checking BLG BP dynamics: {e}")
+
+    # ── 微博赛前海报 ──
+
+    async def _check_weibo_posters(self) -> None:
+        """微博各队官号：检测 LPL+预告 赛前海报并推送"""
+        if not is_weibo_poster_push_enabled(self._config):
+            return
+
+        try:
+            uids = get_weibo_uids(self._config)
+            if not uids:
+                return
+
+            posters = await weibo.fetch_weibo_posters(uids)
+            if not posters:
+                return
+
+            new_posters = []
+            for post in posters:
                 post_id = str(post.get("id") or post.get("mid", ""))
                 if post_id and post_id not in self._state.weibo_updates:
-                    new_posts.append(post)
+                    new_posters.append(post)
                     self._state.weibo_updates.add(post_id)
 
-            if new_posts:
-                lines = ["📢 微博官号更新\n"]
-                for post in new_posts:
-                    lines.append(f"• {post.get('text', '').strip()[:80]}")
-                    if post.get("url"):
-                        lines.append(f"  {post['url']}")
-                await self._broadcast("\n".join(lines), None)
+            if new_posters:
+                text = formatter.format_weibo_poster(new_posters)
+                await self._broadcast(text, None)
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] Sent {len(new_posts)} weibo updates")
+                logger.info(f"[LoLNotifier] Sent {len(new_posters)} weibo poster(s)")
         except Exception as e:
-            logger.error(f"[LoLNotifier] Error checking weibo: {e}")
+            logger.error(f"[LoLNotifier] Error checking weibo posters: {e}")
+
+    # ── 赛事节点 ──
 
     async def _check_elimination_updates(self) -> None:
         """败者组/淘汰赛关键节点：晋级/淘汰情况 + 后续对阵"""
         try:
             # TODO: 实现淘汰赛节点检测逻辑
-            # 这里需要从 API 获取淘汰赛进度数据
             pass
         except Exception as e:
             logger.error(f"[LoLNotifier] Error checking elimination: {e}")

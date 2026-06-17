@@ -151,11 +151,90 @@ def format_elimination_update(bracket_info: dict[str, Any]) -> str:
 
 
 def format_bilibili_update(items: list[dict[str, Any]]) -> str:
+    """格式化 B 站视频更新推送消息
+
+    items: [{"type":"video","bvid":"BV...","title":"...","pubdate":1234567890,"url":"...","cover":"..."}]
+    """
     if not items:
         return "📺 暂无 B 站官号更新。"
-    lines = ["📺 B 站官号最新动态"]
-    for item in items:
-        title = item.get("title") or item.get("description") or "新内容"
-        url = item.get("url") or item.get("link") or ""
-        lines.append(f"  {title} {url}")
+
+    lines = [f"📺 B 站官号更新了 {len(items)} 个视频：\n"]
+    for i, item in enumerate(items, 1):
+        title = item.get("title", "无标题")
+        url = item.get("url", "")
+        bvid = item.get("bvid", "")
+        desc = item.get("description", "")
+        summary = f"{desc[:60]}..." if len(desc) > 60 else desc
+
+        lines.append(f"{i}. {title}")
+        lines.append(f"   BV: {bvid}")
+        if summary:
+            lines.append(f"   {summary}")
+        lines.append(f"   {url}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ── BLG BP 图文动态 ──
+
+def format_bilibili_bp_update(items: list[dict[str, Any]]) -> str:
+    """格式化 BLG BP 图文动态推送消息。
+
+    items: [{"dynamic_id":"...","text":"BP阵容...","images":[...],"url":"..."}]
+    """
+    if not items:
+        return ""
+
+    lines = [f"🔵 BLG 电子竞技俱乐部 · BP 更新\n"]
+    for i, item in enumerate(items, 1):
+        text = item.get("text", "")
+        url = item.get("url", "")
+        images = item.get("images", [])
+
+        # 截断过长文本
+        display_text = text[:200] + "..." if len(text) > 200 else text
+
+        lines.append(f"━━ 第 {i} 条 ━━")
+        lines.append(display_text)
+        if url:
+            lines.append(f"\n🔗 {url}")
+        if images:
+            lines.append(f"\n📷 图片 {len(images)} 张：")
+            for j, img_url in enumerate(images[:4], 1):  # 最多显示 4 张
+                lines.append(f"  [{j}] {img_url}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ── 微博赛前海报 ──
+
+def format_weibo_poster(items: list[dict[str, Any]]) -> str:
+    """格式化微博赛前海报推送消息。
+
+    items: [{"id":"...","text":"...","images":[...],"url":"...","user_name":"..."}]
+    """
+    if not items:
+        return ""
+
+    lines = ["📢 LPL 赛前海报推送\n"]
+    for i, item in enumerate(items, 1):
+        user_name = item.get("user_name", "未知账号")
+        text = item.get("text", "")
+        url = item.get("url", "")
+        images = item.get("images", [])
+
+        display_text = text[:100] + "..." if len(text) > 100 else text
+
+        lines.append(f"━━ {user_name} ━━")
+        lines.append(display_text)
+        if url:
+            lines.append(f"\n🔗 {url}")
+        if images:
+            lines.append(f"\n🖼️ 海报 {len(images)} 张：")
+            for j, img_url in enumerate(images[:3], 1):
+                lines.append(f"  [{j}] {img_url}")
+        lines.append("")
+
     return "\n".join(lines)

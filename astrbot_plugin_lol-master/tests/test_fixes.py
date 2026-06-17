@@ -130,14 +130,19 @@ class TestSchedulerLoggerImport(unittest.TestCase):
         self.assertIn("from astrbot.api import logger", source)
 
     def test_scheduler_has_bilibili_check(self):
-        """调度器包含 Bilibili 更新检测逻辑。"""
+        """调度器包含 Bilibili 视频检测逻辑。"""
         source = _SCHEDULER_SRC.read_text(encoding="utf-8")
-        self.assertIn("_check_bilibili_updates", source)
+        self.assertIn("_check_bilibili_videos", source)
+
+    def test_scheduler_has_blg_bp_check(self):
+        """调度器包含 BLG BP 动态检测逻辑。"""
+        source = _SCHEDULER_SRC.read_text(encoding="utf-8")
+        self.assertIn("_check_blg_bp_dynamics", source)
 
     def test_scheduler_has_weibo_check(self):
-        """调度器包含微博更新检测逻辑。"""
+        """调度器包含微博海报检测逻辑。"""
         source = _SCHEDULER_SRC.read_text(encoding="utf-8")
-        self.assertIn("_check_weibo_updates", source)
+        self.assertIn("_check_weibo_posters", source)
 
     def test_scheduler_has_24h_check(self):
         source = _SCHEDULER_SRC.read_text(encoding="utf-8")
@@ -180,6 +185,12 @@ class TestStateModel(unittest.TestCase):
         source = state_path.read_text(encoding="utf-8")
         self.assertIn("bilibili_updates", source)
 
+    def test_state_has_bilibili_bp_dynamics(self):
+        """State 模型包含 BLG BP 去重字段。"""
+        state_path = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "state.py"
+        source = state_path.read_text(encoding="utf-8")
+        self.assertIn("bilibili_bp_dynamics", source)
+
     def test_state_has_weibo_updates(self):
         state_path = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "state.py"
         source = state_path.read_text(encoding="utf-8")
@@ -197,7 +208,25 @@ class TestFetcherPackage(unittest.TestCase):
         ]:
             self.assertIn(name, source)
 
+    def test_blg_bp_fetcher_exported(self):
+        """BLG BP 动态抓取器已导出。"""
+        init_path = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "fetcher" / "__init__.py"
+        source = init_path.read_text(encoding="utf-8")
+        self.assertIn("fetch_blg_bp_dynamics", source)
+
     def test_weibo_functions_exported(self):
         init_path = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "fetcher" / "__init__.py"
         source = init_path.read_text(encoding="utf-8")
         self.assertIn("fetch_weibo_by_keyword", source)
+
+
+class TestNewFormatters(unittest.TestCase):
+    """新增 BLG BP 和微博海报格式化函数。"""
+
+    def test_format_blg_bp_exists(self):
+        fmt = _load_formatter()
+        self.assertTrue(hasattr(fmt, "format_bilibili_bp_update"))
+
+    def test_format_weibo_poster_exists(self):
+        fmt = _load_formatter()
+        self.assertTrue(hasattr(fmt, "format_weibo_poster"))

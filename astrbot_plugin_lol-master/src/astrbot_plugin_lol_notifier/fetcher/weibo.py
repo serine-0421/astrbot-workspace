@@ -1,58 +1,141 @@
-"""Weibo content fetcher for LoL notifications.
+"""Weibo 内容抓取器 — LPL 赛前海报推送。
 
-Supports:
-- 定时监控多个微博账号 (URL/UID/用户名)
-- 精准推送最新更新，自动过滤置顶微博
-- Cookie 配置确保稳定性
-- 屏蔽词过滤 + 白名单关键词过滤
-- 原创/转发微博选择推送
-- 数据持久化避免重复推送
+流程：检测官号更新 → 关键词匹配 "LPL" + "预告" → 下载图片 → 推送。
+使用 m.weibo.cn 移动端 API，无需 Cookie 即可访问公开内容。
 """
 
 from __future__ import annotations
 
+import asyncio
+import re
+from typing import Any
 
-# 微博官方账号配置
-LOL_OFFICIAL_WEIBO_UIDS = [
-    "6537214902",  # 英雄联盟赛事
-    # 可以添加更多官方账号
-]
+import httpx
+
+from astrbot.api import logger
+
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/125.0.0.0 Safari/537.36"
+)
+
+# HTML 标签清洗
+_TAG_RE = re.compile(r"<[^>]+>")
 
 
-async def fetch_weibo_posters() -> list[dict]:
-    """Fetch match posters and event graphics from official Weibo accounts.
-    
+def _strip_html(text: str) -> str:
+    """去除 HTML 标签，保留纯文本。"""
+    return _TAG_RE.sub("", text).strip()
+
+
+def _extract_images(post_data: dict) -> list[str]:
+    """从帖子数据中提取图片 URL 列表（优先原图）。"""
+    images: list[str] = []
+    pics = post_data.get("pics", [])
+    if not pics:
+        # mblog 嵌套结构
+        mblog = post_data.get("mblog", {})
+        pics = mblog.get("pics", [])
+    for pic in pics:
+        url = pic.get("large", {}).get("url") or pic.get("url", "")
+        if url:
+            images.append(url)
+    return images
+
+
+async def _fetch_user_posts(uid: str) -> list[dict[str, Any]]:
+    """获取指定微博用户的最新帖子。"""
+    container_id = f"107603{uid}"
+    url = "https://m.weibo.cn/api/container/getIndex"
+    params = {"type": "uid", "value": uid, "containerid": container_id}
+    headers = {
+        "User-Agent": _USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Referer": f"https://m.weibo.cn/u/{uid}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            data = resp.json()
+
+        if data.get("ok") != 1:
+            logger.debug(f"[Weibo] API error for uid={uid}: {data.get('msg', 'unknown')}")
+            return []
+
+        cards = data.get("data", {}).get("cards", [])
+        posts: list[dict[str, Any]] = []
+
+        for card in cards:
+            if card.get("card_type") != 9:
+                continue
+            mblog = card.get("mblog", {})
+            if not mblog:
+                continue
+
+            text_raw = mblog.get("text", "")
+            text_clean = _strip_html(text_raw)
+
+            posts.append({
+                "id": str(mblog.get("id", "")),
+                "mid": str(mblog.get("mid", mblog.get("id", ""))),
+                "text": text_clean,
+                "text_raw": text_raw,
+                "images": _extract_images(mblog),
+                "url": f"https://weibo.com/{uid}/{mblog.get('mid', '')}",
+                "created_at": mblog.get("created_at", ""),
+                "uid": uid,
+                "user_name": mblog.get("user", {}).get("screen_name", ""),
+            })
+
+        return posts
+
+    except Exception as e:
+        logger.debug(f"[Weibo] Exception for uid={uid}: {e}")
+        return []
+
+
+def _is_poster(post: dict) -> bool:
+    """判断是否为赛前海报：同时包含"LPL"和"预告"关键词。"""
+    text = post.get("text", "")
+    return ("LPL" in text) and ("预告" in text)
+
+
+async def fetch_weibo_posters(uids: list[str] | None = None) -> list[dict[str, Any]]:
+    """获取所有关注官号中匹配"LPL+预告"的赛前海报。
+
+    Args:
+        uids: 微博 UID 列表，None 时不抓取。
+
     Returns:
-        List of posters with keys: id, text, images, url, created_at, is_top
+        [{"id":"...","mid":"...","text":"...","images":[...],"url":"...","uid":"..."}]
     """
-    # TODO: 接入微博官方账号内容抓取
-    # 需要配置微博 Cookie 才能稳定抓取
-    # 过滤置顶微博，只推送最新内容
-    return []
+    if not uids:
+        return []
 
+    all_posts: list[dict[str, Any]] = []
+
+    for uid in uids:
+        posts = await _fetch_user_posts(uid)
+        for post in posts:
+            if _is_poster(post):
+                all_posts.append(post)
+
+    if all_posts:
+        logger.info(f"[Weibo] Found {len(all_posts)} poster(s) across {len(uids)} account(s)")
+
+    return all_posts
+
+
+# ── 保留兼容旧接口的占位函数 ──
 
 async def fetch_weibo_announcements() -> list[dict]:
-    """Fetch official announcements and pre-match posters from Weibo.
-    
-    Returns:
-        List of announcements with keys: id, text, images, url, created_at, is_original
-    """
-    # TODO: 抓取微博赛前官宣、阵容和海报内容
-    # 支持屏蔽词过滤
-    # 支持白名单关键词过滤（如 "赛程"、"对阵"、"首发"）
+    """Deprecated: 使用 fetch_weibo_posters 替代。"""
     return []
 
 
 async def fetch_weibo_by_keyword(keyword: str, filter_repost: bool = True) -> list[dict]:
-    """Fetch Weibo posts by keyword.
-    
-    Args:
-        keyword: 搜索关键词
-        filter_repost: 是否过滤转发微博，只保留原创
-    
-    Returns:
-        List of posts matching the keyword
-    """
-    # TODO: 根据关键词搜索微博内容
-    # 支持自定义消息格式
+    """Deprecated: 暂未实现关键词搜索。"""
     return []
+
