@@ -18,16 +18,32 @@ Commands (prefix /lol):
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
+
+# 支持直接运行 python main.py（不依赖 AstrBot 加载）
+_SELF_DIR = os.path.dirname(os.path.abspath(__file__))
+_SRC_DIR = os.path.join(_SELF_DIR, "src")
+for _d in (_SELF_DIR, _SRC_DIR):
+    if _d not in sys.path:
+        sys.path.insert(0, _d)
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
-from .src.astrbot_plugin_lol_notifier.fetcher import api
-from .src.astrbot_plugin_lol_notifier import formatter as fmt
-from .src.astrbot_plugin_lol_notifier import image_renderer as img
-from .src.astrbot_plugin_lol_notifier.models import Failure, Success
-from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
+try:
+    from .src.astrbot_plugin_lol_notifier.fetcher import api
+    from .src.astrbot_plugin_lol_notifier import formatter as fmt
+    from .src.astrbot_plugin_lol_notifier import image_renderer as img
+    from .src.astrbot_plugin_lol_notifier.models import Failure, Success
+    from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
+except ImportError:
+    from src.astrbot_plugin_lol_notifier.fetcher import api
+    from src.astrbot_plugin_lol_notifier import formatter as fmt
+    from src.astrbot_plugin_lol_notifier import image_renderer as img
+    from src.astrbot_plugin_lol_notifier.models import Failure, Success
+    from src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 
 HELP_TEXT = """🎮 LoL Notifier 指令列表
 
@@ -188,10 +204,22 @@ class LoLNotifierPlugin(Star):
         league: str = "",
     ):
         """查看正在进行的实时比赛（击杀/经济/塔/龙/男爵）"""
-        from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import (
-            fetch_live_match_details,
-            fetch_live_matches,
-        )
+        try:
+            from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import (
+                fetch_live_match_details,
+                fetch_live_matches,
+            )
+            from .src.astrbot_plugin_lol_notifier.formatter.message import (
+                format_live_match,
+            )
+        except ImportError:
+            from src.astrbot_plugin_lol_notifier.fetcher.lolesports import (
+                fetch_live_match_details,
+                fetch_live_matches,
+            )
+            from src.astrbot_plugin_lol_notifier.formatter.message import (
+                format_live_match,
+            )
 
         league_arg = (league or "").strip().lower() or None
         result = await fetch_live_matches(league=league_arg)
@@ -204,8 +232,6 @@ class LoLNotifierPlugin(Star):
                     detailed.append(await fetch_live_match_details(lm))
 
                 # 格式化输出
-                from .src.astrbot_plugin_lol_notifier.formatter.message import format_live_match
-
                 lines_parts = []
                 for lm in detailed:
                     lines_parts.append(format_live_match(lm))

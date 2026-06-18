@@ -1,18 +1,21 @@
 """LoL Esports 官方数据抓取器。
 
-数据来源：lolesports.com 公开 API（无需 API Key）。
+数据来源：esports-api.lolesports.com (LoL Esports API)
 - 赛程 / 排名: esports-api.lolesports.com/persisted/gw
 - 实时比赛帧数据: feed.lolesports.com/livestats/v1/window
 - 比赛详情: esports-api.lolesports.com/persisted/gw/getEventDetails
 
-League ID 参考：
-  LCK: 98767991302996019
-  LPL: 98767991314006698
+API Key 管理：
+  默认使用 lolesports.com 网页端 Key（公开可用）。
+  也可通过环境变量 RIOT_API_KEY 设置自己的 Key。
+  Riot Dev Key 申请地址: https://developer.riotgames.com/
+
+League ID 通过 getLeagues 动态获取，无需硬编码。
 """
 
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -45,17 +48,81 @@ _USER_AGENT = (
 _BASE_SCHEDULE = "https://esports-api.lolesports.com/persisted/gw"
 _BASE_FEED = "https://feed.lolesports.com/livestats/v1"
 
-# LoL Esports API key — 来自 lolesports.com 网页端，公开可用
-_LOL_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
+# ── API Key 管理 ──
+# 优先级: 环境变量 RIOT_API_KEY > 内置 Web Client Key
+# 内置 Key 来自 lolesports.com 网页端（公开可用，非 Riot Dev Key）
+# 如需使用自己的 Riot Dev Key，设置环境变量 RIOT_API_KEY
+# Riot Dev Key 申请地址: https://developer.riotgames.com/
 
-# League ID 映射
-_LEAGUE_IDS: dict[str, str] = {
-    "lck": "98767991302996019",
-    "lpl": "98767991314006698",
-}
-_LEAGUE_NAMES: dict[str, str] = {"lck": "LCK", "lpl": "LPL"}
+_BUILTIN_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
 
-# 单例 httpx client（复用连接）
+_LOL_API_KEY: str = os.environ.get("RIOT_API_KEY", _BUILTIN_API_KEY)
+
+
+def get_api_key() -> str:
+    """获取当前 API Key（优先环境变量）。"""
+    global _LOL_API_KEY
+    _LOL_API_KEY = os.environ.get("RIOT_API_KEY", _LOL_API_KEY)
+    return _LOL_API_KEY
+
+
+def set_api_key(key: str) -> None:
+    """运行时设置 API Key（不持久化）。"""
+    global _LOL_API_KEY
+    _LOL_API_KEY = key
+    _reset_client()
+
+
+# ── League ID 缓存 ──
+# 首次调用 getLeagues 后缓存，避免重复请求
+
+_league_ids_cache: dict[str, str] | None = None
+_league_names_cache: dict[str, str] | None = None
+
+
+async def _fetch_league_ids() -> dict[str, str]:
+    """动态获取 League slug → ID 映射（LCK / LPL 等）。"""
+    global _league_ids_cache, _league_names_cache
+    if _league_ids_cache is not None:
+        return _league_ids_cache
+
+    data = await _request("getLeagues", params={"hl": "en-US"})
+    leagues = data.get("leagues", [])
+    _league_ids_cache = {}
+    _league_names_cache = {}
+    for league in leagues:
+        slug = (league.get("slug") or "").lower()
+        lid = league.get("id", "")
+        name = league.get("name", slug.upper())
+        if slug and lid:
+            _league_ids_cache[slug] = lid
+            _league_names_cache[slug] = name
+    logger.info(
+        f"[LoLEsports] Leagues loaded: {len(_league_ids_cache)} total, "
+        f"keys: {sorted(_league_ids_cache.keys())}"
+    )
+    return _league_ids_cache
+
+
+def league_id(slug: str) -> str:
+    """同步获取 League ID（需先调用 fetch_league_ids）。"""
+    if _league_ids_cache is None:
+        return ""
+    return _league_ids_cache.get(slug.lower(), "")
+
+
+def league_name_by_id(lid: str) -> str:
+    """通过 ID 反查赛区名称。"""
+    if _league_names_cache is None:
+        return ""
+    for slug, lid2 in (_league_ids_cache or {}).items():
+        if lid2 == lid:
+            return slug.upper()
+    return ""
+
+
+# ── HTTP Client ──
+
 _client: httpx.AsyncClient | None = None
 
 
@@ -67,12 +134,15 @@ def _get_client() -> httpx.AsyncClient:
             headers={
                 "User-Agent": _USER_AGENT,
                 "Accept": "application/json",
-                "x-api-key": _LOL_API_KEY,
-                "Origin": "https://lolesports.com",
-                "Referer": "https://lolesports.com/",
+                "x-api-key": get_api_key(),
             },
         )
     return _client
+
+
+def _reset_client() -> None:
+    global _client
+    _client = None
 
 
 async def close_session() -> None:
@@ -82,20 +152,43 @@ async def close_session() -> None:
         _client = None
 
 
-# ── API 请求工具 ──
+# ── 通用请求 ──
 
-async def _request(url: str, params: dict | None = None) -> dict[str, Any]:
-    client = _get_client()
+async def _request(
+    endpoint: str,
+    params: dict | None = None,
+    base: str = _BASE_SCHEDULE,
+) -> dict[str, Any]:
+    """统一请求封装。
+    endpoint 可以是绝对 URL 或相对路径（相对 base）。
+    """
+    if endpoint.startswith("http"):
+        url = endpoint
+    else:
+        url = f"{base}/{endpoint}"
+
     try:
+        client = _get_client()
         resp = await client.get(url, params=params or {})
         resp.raise_for_status()
-        data = resp.json()
+        data: dict = resp.json()
         return data.get("data", data)
     except httpx.HTTPStatusError as e:
-        logger.debug(f"[LoLEsports] HTTP {e.response.status_code} for {url}")
+        status = e.response.status_code
+        detail = e.response.text[:200]
+        if status == 403:
+            logger.error(
+                f"[LoLEsports] 403 Forbidden → API Key 可能已过期，"
+                f"请前往 https://developer.riotgames.com/ 重新生成，"
+                f"并设置环境变量 RIOT_API_KEY。"
+            )
+        elif status == 429:
+            logger.warning("[LoLEsports] 429 Rate Limited — 请降低请求频率。")
+        else:
+            logger.debug(f"[LoLEsports] HTTP {status} for {url}: {detail}")
         return {}
-    except Exception as e:
-        logger.debug(f"[LoLEsports] Request failed: {url} — {e}")
+    except Exception as exc:
+        logger.debug(f"[LoLEsports] Request failed: {url} — {exc}")
         return {}
 
 
@@ -104,15 +197,20 @@ async def _request(url: str, params: dict | None = None) -> dict[str, Any]:
 # ═══════════════════════════════════════════════════
 
 async def fetch_schedule(league: str = "lck") -> ScheduleResult:
-    """获取 League 近期赛程"""
-    league_id = _LEAGUE_IDS.get(league)
-    if not league_id:
-        return Failure(error=f"不支持的赛区: {league}")
+    """获取 League 近期赛程。
 
-    data = await _request(
-        f"{_BASE_SCHEDULE}/getSchedule",
-        params={"hl": "zh-CN", "leagueId": league_id},
-    )
+    league: 赛区 slug，如 "lck" / "lpl"
+    """
+    slug = (league or "").strip().lower()
+    await _fetch_league_ids()
+    lid = league_id(slug)
+    if not lid:
+        return Failure(
+            error=f"不支持的赛区: {slug}，"
+            f"可用: {list((_league_ids_cache or {}).keys())}"
+        )
+
+    data = await _request("getSchedule", params={"hl": "zh-CN", "leagueId": lid})
     schedule_data = data.get("schedule", data)
 
     events = schedule_data.get("events", [])
@@ -130,7 +228,7 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
         dt = _parse_iso(start_time) if start_time else ("", "")
 
         matches.append(LeagueMatch(
-            league=league.upper(),
+            league=slug.upper(),
             stage=strategy.get("type", "regular"),
             round=str(match_obj.get("id", "")),
             match_name=" vs ".join(teams) if teams else "",
@@ -150,13 +248,13 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
 # ═══════════════════════════════════════════════════
 
 async def fetch_live_matches(league: str | None = None) -> LiveResult:
-    """获取正在进行的比赛（可选筛选赛区）"""
-    data = await _request(
-        f"{_BASE_SCHEDULE}/getLive",
-        params={"hl": "zh-CN"},
-    )
+    """获取正在进行的比赛（可选筛选赛区）。"""
+    data = await _request("getLive", params={"hl": "zh-CN"})
     schedule = data.get("schedule", data)
     events = schedule.get("events", [])
+
+    await _fetch_league_ids()
+
     live_matches: list[LiveMatch] = []
 
     for ev in events:
@@ -164,25 +262,22 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
             continue
         match_obj = ev.get("match", {})
         tournament = ev.get("tournament", {})
-        league_id = tournament.get("leagueId", "")
+        league_id_str = tournament.get("leagueId", "")
 
         # 赛区筛选
-        if league and league not in _LEAGUE_IDS:
-            continue
-        if league and league_id != _LEAGUE_IDS.get(league):
-            continue
+        if league:
+            lid = league_id(league.strip().lower())
+            if not lid or league_id_str != lid:
+                continue
 
-        league_name = _league_name_by_id(league_id)
+        league_name = league_name_by_id(league_id_str) or ""
 
         teams_raw = match_obj.get("teams", [])
-        teams = []
-        for t in teams_raw:
-            teams.append(t.get("name", t.get("code", "?")))
+        teams = [t.get("name", t.get("code", "?")) for t in teams_raw]
 
         strategy = match_obj.get("strategy", {})
 
-        # 解析对局
-        games = []
+        games: list[LiveGameFrame] = []
         for g in match_obj.get("games", []):
             game_id = g.get("id", "")
             state = g.get("state", "")
@@ -196,12 +291,13 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
                 state=state,
                 blue_team=blue.get("name", blue.get("code", "蓝方")),
                 red_team=red.get("name", red.get("code", "红方")),
-                winner="blue" if blue.get("result", {}).get("outcome") == "win" else (
-                    "red" if red.get("result", {}).get("outcome") == "win" else ""
+                winner=(
+                    "blue" if blue.get("result", {}).get("outcome") == "win"
+                    else "red" if red.get("result", {}).get("outcome") == "win"
+                    else ""
                 ),
             ))
 
-        # 比分
         blue_wins = sum(1 for g in games if g.winner == "blue")
         red_wins = sum(1 for g in games if g.winner == "red")
         score = f"{blue_wins}:{red_wins}"
@@ -227,30 +323,23 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
 # ═══════════════════════════════════════════════════
 
 async def fetch_live_frame(game_id: str, since: int = 0) -> LiveGameFrame | None:
-    """获取某一局比赛的实时帧数据。since=0 获取最新帧。
-
-    返回 LiveGameFrame 包含击杀/经济/塔/龙/男爵/水晶等实时数据。
-    """
+    """获取某一局比赛的实时帧数据。since=0 获取最新帧。"""
     url = f"{_BASE_FEED}/window/{game_id}"
-    params: dict = {"hl": "zh-CN"}
+    params: dict[str, Any] = {"hl": "zh-CN"}
     if since > 0:
         params["startingTime"] = str(since)
 
     try:
-        data = await _request(url, params)
-        # feed API 直接返回 frames 数组
+        data = await _request(url, params=params, base=_BASE_FEED)
         frames = data.get("frames", []) if isinstance(data, dict) else []
+        if not frames and isinstance(data, list):
+            frames = data[-1:]
 
         if not frames:
-            # Try: data itself might be a list of frames
-            if isinstance(data, list):
-                frames = data[-1:]  # take latest
-            else:
-                return None
+            return None
 
         latest = frames[-1] if frames else {}
         game_state = latest.get("gameState", data.get("gameState", ""))
-
         blue = latest.get("blueTeam", {})
         red = latest.get("redTeam", {})
 
@@ -281,7 +370,7 @@ async def fetch_live_frame(game_id: str, since: int = 0) -> LiveGameFrame | None
 
 
 async def fetch_live_match_details(live_match: LiveMatch) -> LiveMatch:
-    """为 LiveMatch 的每局填充实时帧数据"""
+    """为 LiveMatch 的每局填充实时帧数据。"""
     updated_games: list[LiveGameFrame] = []
     for game in live_match.games:
         if game.state == "in_progress" and game.game_id:
@@ -302,14 +391,15 @@ async def fetch_live_match_details(live_match: LiveMatch) -> LiveMatch:
 # ═══════════════════════════════════════════════════
 
 async def fetch_standings(league: str = "lck") -> StandingsResult:
-    """获取 League 排名/积分榜"""
-    league_id = _LEAGUE_IDS.get(league)
-    if not league_id:
-        return Failure(error=f"不支持的赛区: {league}")
+    """获取 League 排名/积分榜。"""
+    slug = (league or "").strip().lower()
+    await _fetch_league_ids()
+    lid = league_id(slug)
+    if not lid:
+        return Failure(error=f"不支持的赛区: {slug}")
 
     data = await _request(
-        f"{_BASE_SCHEDULE}/getStandings",
-        params={"hl": "zh-CN", "tournamentId": league_id},
+        "getStandings", params={"hl": "zh-CN", "tournamentId": lid}
     )
 
     standings_list = data.get("standings", [])
@@ -334,10 +424,12 @@ async def fetch_standings(league: str = "lck") -> StandingsResult:
 # ═══════════════════════════════════════════════════
 
 async def fetch_match_detail(match_id: str) -> MatchDetail | None:
-    """获取某场比赛详细信息（含 BP 阵容）"""
+    """获取某场比赛详细信息（含 BP 阵容）。
+
+    按 Riot API 规范，使用 id 参数传递 match_id。
+    """
     data = await _request(
-        f"{_BASE_SCHEDULE}/getEventDetails",
-        params={"hl": "zh-CN", "eventId": match_id},
+        "getEventDetails", params={"hl": "zh-CN", "id": match_id}
     )
     event = data.get("event", data)
     if not event:
@@ -354,7 +446,6 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
         red = _pick_side(game_teams, "red")
 
         bp_entries: list[BPEntry] = []
-        # 解析 bans/picks
         for side_name, side_data in [("蓝方", blue), ("红方", red)]:
             for ban in side_data.get("bans", []):
                 bp_entries.append(BPEntry(
@@ -371,11 +462,15 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
                     result=pick.get("role", ""),
                 ))
 
-        winner = "blue" if blue.get("result", {}).get("outcome") == "win" else (
-            "red" if red.get("result", {}).get("outcome") == "win" else ""
+        winner = (
+            "blue" if blue.get("result", {}).get("outcome") == "win"
+            else "red" if red.get("result", {}).get("outcome") == "win"
+            else ""
         )
-        winner_name = blue.get("name", "") if winner == "blue" else (
-            red.get("name", "") if winner == "red" else ""
+        winner_name = (
+            blue.get("name", "") if winner == "blue"
+            else red.get("name", "") if winner == "red"
+            else ""
         )
 
         games.append(MatchGame(
@@ -388,7 +483,7 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
         ))
 
     tournament = event.get("tournament", {})
-    league_name = _league_name_by_id(tournament.get("leagueId", ""))
+    league_name = league_name_by_id(tournament.get("leagueId", ""))
 
     return MatchDetail(
         league=league_name,
@@ -404,15 +499,8 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
 #  工具函数
 # ═══════════════════════════════════════════════════
 
-def _league_name_by_id(league_id: str) -> str:
-    for key, lid in _LEAGUE_IDS.items():
-        if lid == league_id:
-            return key.upper()
-    return ""
-
-
 def _parse_iso(iso_str: str) -> tuple[str, str]:
-    """ISO 8601 → (date, time)"""
+    """ISO 8601 → (date, time) 本地时间。"""
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         local = dt.astimezone()
@@ -422,7 +510,7 @@ def _parse_iso(iso_str: str) -> tuple[str, str]:
 
 
 def _pick_side(teams: list[dict], side: str) -> dict:
-    """从 teams 列表取出 blue/red 侧"""
+    """从 teams 列表取出 blue/red 侧。"""
     for t in teams:
         if t.get("side", "").lower() == side:
             return t
@@ -430,7 +518,8 @@ def _pick_side(teams: list[dict], side: str) -> dict:
 
 
 def _format_duration(seconds: int) -> str:
+    """秒数 → mm:ss 格式。"""
     if not seconds:
         return ""
-    m, s = divmod(seconds, 60)
+    m, s = divmod(int(seconds), 60)
     return f"{m}:{s:02d}"
