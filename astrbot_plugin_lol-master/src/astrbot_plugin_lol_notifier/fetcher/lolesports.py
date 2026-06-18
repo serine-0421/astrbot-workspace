@@ -45,6 +45,9 @@ _USER_AGENT = (
 _BASE_SCHEDULE = "https://esports-api.lolesports.com/persisted/gw"
 _BASE_FEED = "https://feed.lolesports.com/livestats/v1"
 
+# LoL Esports API key — 来自 lolesports.com 网页端，公开可用
+_LOL_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
+
 # League ID 映射
 _LEAGUE_IDS: dict[str, str] = {
     "lck": "98767991302996019",
@@ -61,7 +64,13 @@ def _get_client() -> httpx.AsyncClient:
     if _client is None:
         _client = httpx.AsyncClient(
             timeout=15.0,
-            headers={"User-Agent": _USER_AGENT, "Accept": "application/json"},
+            headers={
+                "User-Agent": _USER_AGENT,
+                "Accept": "application/json",
+                "x-api-key": _LOL_API_KEY,
+                "Origin": "https://lolesports.com",
+                "Referer": "https://lolesports.com/",
+            },
         )
     return _client
 
@@ -79,8 +88,12 @@ async def _request(url: str, params: dict | None = None) -> dict[str, Any]:
     client = _get_client()
     try:
         resp = await client.get(url, params=params or {})
+        resp.raise_for_status()
         data = resp.json()
         return data.get("data", data)
+    except httpx.HTTPStatusError as e:
+        logger.debug(f"[LoLEsports] HTTP {e.response.status_code} for {url}")
+        return {}
     except Exception as e:
         logger.debug(f"[LoLEsports] Request failed: {url} — {e}")
         return {}

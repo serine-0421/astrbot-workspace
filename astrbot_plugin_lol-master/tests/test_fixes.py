@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import unittest
 from pathlib import Path
 
 
 _SRC_ROOT = Path(__file__).resolve().parent.parent / "src"
+# 确保包可以被正常 import
+if str(_SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SRC_ROOT))
+
 _SCHEDULER_SRC = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "scheduler.py"
-_API_SRC = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "api.py"
-# formatter 已重构为包，入口是 formatter/message.py
+_API_SRC = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "fetcher" / "api.py"
 _FORMATTER_SRC = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "formatter" / "message.py"
 _MAIN_SRC = Path(__file__).resolve().parent.parent / "main.py"
 
@@ -28,61 +32,29 @@ class TestMainSurface(unittest.TestCase):
 
 class TestLoLApiSkeleton(unittest.TestCase):
     def _import_api(self):
-        import importlib.util
-        import sys
-
-        mod_name = "src.astrbot_plugin_lol_notifier.api"
-        if mod_name not in sys.modules:
-            spec = importlib.util.spec_from_file_location(mod_name, _API_SRC)
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules[mod_name] = mod
-            spec.loader.exec_module(mod)
-        return sys.modules[mod_name]
+        from astrbot_plugin_lol_notifier.fetcher import api
+        return api
 
     def test_schedule_rejects_invalid_league(self):
         api = self._import_api()
         result = asyncio.run(api.get_schedule("csgo", "regular"))
         self.assertFalse(result.ok)
 
-    def test_schedule_returns_not_implemented_for_supported_inputs(self):
+    def test_schedule_works_for_supported_league(self):
+        """接入真实 API 后应返回 Success"""
         api = self._import_api()
         result = asyncio.run(api.get_schedule("lck", "regular"))
-        self.assertFalse(result.ok)
-        self.assertIn("尚未接入", result.error)
+        self.assertTrue(result.ok, msg=f"Expected Success, got error: {getattr(result, 'error', '')}")
 
 
 def _load_models():
-    import importlib.util
-    import sys
-
-    mod_name = "src.astrbot_plugin_lol_notifier.models"
-    if mod_name not in sys.modules:
-        models_path = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "models.py"
-        spec = importlib.util.spec_from_file_location(mod_name, models_path)
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = mod
-        spec.loader.exec_module(mod)
-    return sys.modules[mod_name]
+    from astrbot_plugin_lol_notifier import models
+    return models
 
 
 def _load_formatter():
-    import importlib.util
-    import sys
-
-    mod_name = "src.astrbot_plugin_lol_notifier.formatter.message"
-    # 确保父包也注册，避免相对导入失败
-    pkg_name = "src.astrbot_plugin_lol_notifier.formatter"
-    if pkg_name not in sys.modules:
-        pkg_init = _SRC_ROOT / "astrbot_plugin_lol_notifier" / "formatter" / "__init__.py"
-        spec_pkg = importlib.util.spec_from_file_location(pkg_name, pkg_init)
-        pkg_mod = importlib.util.module_from_spec(spec_pkg)
-        sys.modules[pkg_name] = pkg_mod
-    if mod_name not in sys.modules:
-        spec = importlib.util.spec_from_file_location(mod_name, _FORMATTER_SRC)
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = mod
-        spec.loader.exec_module(mod)
-    return sys.modules[mod_name]
+    from astrbot_plugin_lol_notifier.formatter import message
+    return message
 
 
 class TestFormatterRobustness(unittest.TestCase):

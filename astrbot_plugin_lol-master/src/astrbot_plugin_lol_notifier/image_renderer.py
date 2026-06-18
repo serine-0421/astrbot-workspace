@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .formatter import format_match_bp, format_match_detail, format_match_result, format_schedule, format_standings
+from .formatter.message import format_match_bp, format_match_detail, format_match_result, format_schedule, format_standings
 from .models import LeagueMatch, MatchDetail, StandingEntry
 
 
