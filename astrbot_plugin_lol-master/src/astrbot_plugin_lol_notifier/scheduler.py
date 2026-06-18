@@ -24,9 +24,9 @@ from astrbot.api.message.components import Image, MessageChain, Plain
 from . import image_renderer as img
 from .config import get_blg_uid, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
 from .fetcher import api as fetcher_api
-from .fetcher import bilibili, bilibili_dynamic, weibo
+from .fetcher import bilibili, bilibili_dynamic, lolesports, weibo
 from .formatter import message as formatter
-from .models import Failure, LeagueMatch, Success
+from .models import Failure, LeagueMatch, LiveMatch, Success
 from .state import NotificationState, default_state
 
 if TYPE_CHECKING:
@@ -157,6 +157,9 @@ class LoLScheduler:
 
         # 3. B站 BLG官号 → BP图文动态
         await self._check_blg_bp_dynamics()
+
+        # ═══ 实时比赛轮询（独立于赛程 API） ═══
+        await self._check_live_matches()
 
         # ═══ 赛事数据推送（依赖赛程 API） ═══
 
@@ -453,6 +456,45 @@ class LoLScheduler:
                 logger.info(f"[LoLNotifier] Sent {len(new_posters)} weibo poster(s)")
         except Exception as e:
             logger.error(f"[LoLNotifier] Error checking weibo posters: {e}")
+
+    # ── 赛事节点 ──
+
+    async def _check_live_matches(self) -> None:
+        """实时比赛轮询：检测正在进行中的比赛，有比分变化时推送"""
+        try:
+            result = await lolesports.fetch_live_matches()
+            if not result.ok or not result.value:
+                return
+
+            live_matches: list[LiveMatch] = result.value
+            for lm in live_matches:
+                # 只推送有正在进行中的局的比赛
+                active_games = [g for g in lm.games if g.state == "in_progress"]
+                if not active_games:
+                    continue
+
+                # 获取详细帧数据
+                await lolesports.fetch_live_match_details(lm)
+
+                # 构建状态键
+                match_key = lm.match_id or f"{lm.league}_{lm.match_name}"
+                prev_key = f"live_last_{match_key}"
+
+                # 计算摘要指纹（比分+总击杀）
+                summary = f"{lm.score}|{sum(g.blue_kills + g.red_kills for g in lm.games)}"
+
+                prev_summary = self._state.elimination_updates.get(prev_key, "")
+                if summary == prev_summary:
+                    continue  # 无变化,不推送
+
+                self._state.elimination_updates[prev_key] = summary
+                await self._persist_state()
+
+                text = formatter.format_live_match(lm)
+                await self._broadcast(text, None)
+                logger.info(f"[LoLNotifier] Sent live update for {match_key}: {summary}")
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error checking live matches: {e}")
 
     # ── 赛事节点 ──
 

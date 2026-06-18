@@ -16,16 +16,33 @@ from .bilibili import (
     fetch_bilibili_updates,
 )
 from .bilibili_dynamic import fetch_blg_bp_dynamics
+from .lolesports import (
+    close_session as lolesports_close_session,
+    fetch_live_frame,
+    fetch_live_match_details,
+    fetch_live_matches,
+    fetch_match_detail as lolesports_fetch_match_detail,
+    fetch_schedule as lolesports_fetch_schedule,
+    fetch_standings as lolesports_fetch_standings,
+)
 from .weibo import fetch_weibo_announcements, fetch_weibo_by_keyword, fetch_weibo_posters
 
 __all__ = [
-    # 赛事 API
+    # 赛事 API（封装层）
     "close_session",
     "get_schedule",
     "get_match_result",
     "get_match_bp",
     "get_match_detail",
     "get_standings",
+    # LoL Esports 原始抓取函数
+    "lolesports_close_session",
+    "lolesports_fetch_schedule",
+    "lolesports_fetch_standings",
+    "lolesports_fetch_match_detail",
+    "fetch_live_matches",
+    "fetch_live_match_details",
+    "fetch_live_frame",
     # B站 LOL 官号视频
     "fetch_bilibili_updates",
     "fetch_bilibili_replays",

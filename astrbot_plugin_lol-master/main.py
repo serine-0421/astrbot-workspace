@@ -36,6 +36,8 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
       近期赛程（默认最近 5 场，按赛区与赛段筛选）
   /lol next [lck|lpl] [regular|playoff] [season]
       下一场完整时间表
+  /lol live [lck|lpl]
+      正在进行的实时比赛（击杀/经济/塔/龙/男爵）
   /lol result [lck|lpl] [regular|playoff] [round]
       比赛结果（默认最近一场）
   /lol bp [lck|lpl] [regular|playoff] [round]
@@ -178,6 +180,41 @@ class LoLNotifierPlugin(Star):
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] /lol next error: {err}")
                 yield event.plain_result("❌ 获取下一场赛程失败，请稍后重试。")
+
+    @lol.command("live")
+    async def lol_live(
+        self,
+        event: AstrMessageEvent,
+        league: str = "",
+    ):
+        """查看正在进行的实时比赛（击杀/经济/塔/龙/男爵）"""
+        from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import (
+            fetch_live_match_details,
+            fetch_live_matches,
+        )
+
+        league_arg = (league or "").strip().lower() or None
+        result = await fetch_live_matches(league=league_arg)
+
+        match result:
+            case Success(value=live_matches) if live_matches:
+                # 获取详细帧数据
+                detailed = []
+                for lm in live_matches:
+                    detailed.append(await fetch_live_match_details(lm))
+
+                # 格式化输出
+                from .src.astrbot_plugin_lol_notifier.formatter.message import format_live_match
+
+                lines_parts = []
+                for lm in detailed:
+                    lines_parts.append(format_live_match(lm))
+                yield event.plain_result("\n\n".join(lines_parts))
+            case Success():
+                yield event.plain_result("📡 当前没有正在进行的比赛。")
+            case Failure(error=err):
+                logger.error(f"[LoLNotifier] /lol live error: {err}")
+                yield event.plain_result("❌ 获取实时比赛数据失败，请稍后重试。")
 
     @lol.command("result")
     async def lol_result(

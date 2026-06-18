@@ -12,6 +12,9 @@ from .message import (
     format_bilibili_update,
     format_elimination_update,
     format_lineup_message,
+    format_live_game_frame,
+    format_live_list,
+    format_live_match,
     format_match_bp,
     format_match_detail,
     format_match_result,
@@ -36,6 +39,10 @@ __all__ = [
     "format_bilibili_update",
     "format_bilibili_bp_update",
     "format_weibo_poster",
+    # 实时比赛
+    "format_live_match",
+    "format_live_game_frame",
+    "format_live_list",
     # 图片渲染
     "render_schedule",
     "render_match_result",

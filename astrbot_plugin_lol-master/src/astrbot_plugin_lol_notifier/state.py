@@ -12,7 +12,7 @@ class NotificationState:
     pre_match_notice: dict[str, bool] = field(default_factory=dict)
     bp_round_notice: dict[str, list[int]] = field(default_factory=dict)
     post_round_notice: dict[str, list[int]] = field(default_factory=dict)
-    elimination_updates: dict[str, dict[str, str]] = field(default_factory=dict)
+    elimination_updates: dict[str, str] = field(default_factory=dict)  # 淘汰赛/实时比赛状态指纹
 
     # ── 第三方平台动态去重 ──
     bilibili_updates: set[str] = field(default_factory=set)    # LOL官号视频 BV 号

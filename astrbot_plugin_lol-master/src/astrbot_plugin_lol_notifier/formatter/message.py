@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..models import LeagueMatch, MatchDetail, MatchGame, StandingEntry
+from ..models import LeagueMatch, LiveGameFrame, LiveMatch, MatchDetail, MatchGame, StandingEntry
 from ..utils import replace_side_mentions
 
 
@@ -237,4 +237,65 @@ def format_weibo_poster(items: list[dict[str, Any]]) -> str:
                 lines.append(f"  [{j}] {img_url}")
         lines.append("")
 
+    return "\n".join(lines)
+
+
+# ── 实时比赛格式化 ──
+
+def format_live_game_frame(frame: LiveGameFrame) -> str:
+    """格式化单局实时帧数据为紧凑状态条。"""
+    bar_len = 20
+
+    # 击杀进度条
+    total_k = frame.blue_kills + frame.red_kills
+    if total_k > 0:
+        blue_fill = int(bar_len * frame.blue_kills / max(total_k, 1))
+        red_fill = bar_len - blue_fill
+        bar = "█" * blue_fill + "░" * red_fill
+    else:
+        bar = "░" * bar_len
+
+    # 经济差
+    gold_diff = frame.blue_gold - frame.red_gold
+    if gold_diff > 0:
+        gold_str = f" 🔵 +{gold_diff // 1000}k"
+    elif gold_diff < 0:
+        gold_str = f" 🔴 +{abs(gold_diff) // 1000}k"
+    else:
+        gold_str = ""
+
+    status_icon = {"in_progress": "▶️", "paused": "⏸️", "finished": "🏁"}.get(frame.state, "❓")
+
+    return (
+        f"{status_icon} Game {frame.game_no} | {frame.game_time}\n"
+        f"  {frame.blue_team}: {frame.blue_kills}击杀 | {frame.blue_towers}塔 | {frame.blue_drakes}龙 | {frame.blue_barons}男爵\n"
+        f"  {frame.red_team}: {frame.red_kills}击杀 | {frame.red_towers}塔 | {frame.red_drakes}龙 | {frame.red_barons}男爵\n"
+        f"  [{bar}] {frame.blue_kills} - {frame.red_kills}{gold_str}"
+    )
+
+
+def format_live_match(live: LiveMatch) -> str:
+    """格式化实时比赛为消息。"""
+    lines = [
+        f"📡 实时比分 — {live.league_name} {live.bo_type}",
+        f"⚔️ {live.match_name}  ({live.score})",
+        "",
+    ]
+    for game in live.games:
+        lines.append(format_live_game_frame(game))
+        lines.append("")
+
+    if not live.games:
+        lines.append("⏳ 等待比赛开始...")
+
+    return "\n".join(lines).rstrip()
+
+
+def format_live_list(matches: list[LiveMatch]) -> str:
+    """格式化实时比赛列表。"""
+    if not matches:
+        return "📡 当前没有正在进行的比赛。"
+    lines = [f"📡 实时比赛 ({len(matches)} 场)\n"]
+    for i, live in enumerate(matches, 1):
+        lines.append(f"{i}. [{live.league_name}] {live.match_name}  ({live.score})  {live.status}")
     return "\n".join(lines)

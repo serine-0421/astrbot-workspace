@@ -1,4 +1,4 @@
-"""Data models for the LoL esports plugin skeleton."""
+"""Data models for the LoL esports plugin."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ from typing import Generic, TypeVar, TypeAlias
 
 T = TypeVar("T")
 
+
+# ── 通用 Result 类型 ──
 
 @dataclass(slots=True)
 class Success(Generic[T]):
@@ -22,6 +24,8 @@ class Failure:
 
 ApiResult: TypeAlias = Success[T] | Failure
 
+
+# ── BP / 比赛 / 排名 模型 ──
 
 @dataclass(slots=True)
 class BPEntry:
@@ -77,8 +81,52 @@ class StandingEntry:
     status: str = ""
 
 
+# ── 实时比赛数据模型 ──
+
+@dataclass(slots=True)
+class LiveGameFrame:
+    """单局实时帧数据：击杀/经济/防御塔/龙/男爵"""
+    game_id: str = ""
+    game_no: int = 0
+    state: str = ""                 # "in_progress" / "finished" / "paused"
+    blue_team: str = ""
+    red_team: str = ""
+    blue_kills: int = 0
+    red_kills: int = 0
+    blue_gold: int = 0
+    red_gold: int = 0
+    blue_towers: int = 0
+    red_towers: int = 0
+    blue_barons: int = 0
+    red_barons: int = 0
+    blue_drakes: int = 0
+    red_drakes: int = 0
+    blue_inhibitors: int = 0
+    red_inhibitors: int = 0
+    game_time: str = ""             # "23:45"
+    winner: str = ""
+
+
+@dataclass(slots=True)
+class LiveMatch:
+    """正在进行中的比赛"""
+    match_id: str = ""
+    league: str = ""
+    league_name: str = ""           # "LCK" / "LPL"
+    tournament_id: str = ""
+    match_name: str = ""            # "T1 vs GEN"
+    teams: list[str] = field(default_factory=list)
+    score: str = ""                 # "1:1" 比分
+    bo_type: str = ""               # "BO3" / "BO5"
+    status: str = ""                # "in_progress" / "completed"
+    games: list[LiveGameFrame] = field(default_factory=list)
+
+
+# ── 类型别名 ──
+
 ScheduleResult: TypeAlias = Success[list[LeagueMatch]] | Failure
 ResultResult: TypeAlias = Success[LeagueMatch] | Failure
 BpResult: TypeAlias = Success[LeagueMatch] | Failure
 DetailResult: TypeAlias = Success[MatchDetail] | Failure
 StandingsResult: TypeAlias = Success[list[StandingEntry]] | Failure
+LiveResult: TypeAlias = Success[list[LiveMatch]] | Failure
