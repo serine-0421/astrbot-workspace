@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "skill-astrbot-dev": {
+      "source": "xunxiing/AstrBot-Skill",
+      "sourceType": "github",
+      "skillPath": "skill-astrbot-dev/SKILL.md",
+      "computedHash": "924e506520d4958a070f293e2b677bc618ecb5e185fa1377d0fdd81726508911"
+    }
+  }
+}
