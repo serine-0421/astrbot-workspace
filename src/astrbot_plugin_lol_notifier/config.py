@@ -18,6 +18,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "bilibili_uid": "50329118",
     "enable_bilibili_video_push": True,
     "bilibili_check_interval": 60,
+    "bilibili_cookie": "",
     # ── B站: BLG 电子竞技俱乐部（BP 图文推送） ──
     "bilibili_blg_uid": "545271146",
     "enable_bilibili_blg_bp_push": True,
@@ -47,6 +48,15 @@ def get_bilibili_uid(config: Any) -> str:
 
 def is_bilibili_video_push_enabled(config: Any) -> bool:
     return bool(config.get("enable_bilibili_video_push", True)) if config else True
+
+
+def get_bilibili_cookie(config: Any) -> str:
+    """获取 B站 Cookie，用于绕过风控。环境变量 BILIBILI_COOKIE 优先。"""
+    import os
+    env_cookie = os.environ.get("BILIBILI_COOKIE", "")
+    if env_cookie:
+        return env_cookie
+    return str(config.get("bilibili_cookie", "")) if config else ""
 
 
 # ── B站 BLG ──

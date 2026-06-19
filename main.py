@@ -54,8 +54,8 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
 管理命令：
   /lol subscribe     订阅当前会话的自动推送
   /lol unsubscribe   取消当前会话的自动推送
-  /lol apikey [key]  查看 API Key 状态，或手动设置 Key
-  /lol test [season] 测试插件各项查询功能
+  /lol apikey [key|refresh]  查看/设置 Key、设置 Cookie、强制刷新
+  /lol test [season]        测试插件各项查询功能
 
 已实现的自动推送（订阅后自动触发）：
   📺 B站 LOL官号 (50329118)    → 最新视频投稿
@@ -118,7 +118,7 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result(empty_text)
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] {error_prefix}: {err}")
-                yield event.plain_result("❌ 请求失败，请稍后重试。")
+                yield event.plain_result(f"❌ {err}")
 
     async def initialize(self) -> None:
         """Initialize API Key manager and start scheduler."""
@@ -193,7 +193,7 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result("📅 当前没有可显示的下一场赛程。")
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] /lol next error: {err}")
-                yield event.plain_result("❌ 获取下一场赛程失败，请稍后重试。")
+                yield event.plain_result(f"❌ 获取下一场赛程失败：{err}")
 
     @lol.command("live")
     async def lol_live(
@@ -229,7 +229,7 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result("📡 当前没有正在进行的比赛。")
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] /lol live error: {err}")
-                yield event.plain_result("❌ 获取实时比赛数据失败，请稍后重试。")
+                yield event.plain_result(f"❌ 获取实时比赛数据失败：{err}")
 
     @lol.command("result")
     async def lol_result(
@@ -347,12 +347,32 @@ class LoLNotifierPlugin(Star):
         event: AstrMessageEvent,
         key: str = "",
     ):
-        """查看或设置 Riot API Key 状态"""
-        km = get_key_manager()
+        """查看/设置 Riot API Key 状态。
 
-        # 如果带了 key 参数，尝试设置
-        if key.strip() and len(key.strip()) > 10:
-            ok = await km.set_key(key.strip())
+        /lol apikey                    查看 Key 状态
+        /lol apikey RGAPI-xxx          手动设置 Key
+        /lol apikey refresh            强制刷新（需已配 Cookie 或账号密码）
+        /lol apikey cookie {\"name\":\"value\"}  设置浏览器 Cookie（JSON）
+        """
+        km = get_key_manager()
+        arg = key.strip()
+
+        # 强制刷新
+        if arg.lower() == "refresh":
+            yield event.plain_result("🔄 正在强制刷新 API Key...")
+            result = await km.force_refresh()
+            yield event.plain_result(result["message"])
+            return
+
+        # 设置 Cookie（JSON 格式）
+        if arg.startswith("{"):
+            result = await km.set_cookies(arg)
+            yield event.plain_result(result["message"])
+            return
+
+        # 设置 Key
+        if arg and len(arg) > 10:
+            ok = await km.set_key(arg)
             if ok:
                 yield event.plain_result("✅ API Key 设置成功并通过验证！")
             else:
@@ -368,8 +388,9 @@ class LoLNotifierPlugin(Star):
             f"🔑 Riot API Key 状态\n\n{status['message']}\n\n"
             f"💡 提示:\n"
             f"  • 设置 Key: /lol apikey <你的key>\n"
+            f"  • 设置 Cookie: /lol apikey cookie {{\"name\":\"value\"}}\n"
+            f"  • 强制刷新: /lol apikey refresh\n"
             f"  • 环境变量: RIOT_API_KEY\n"
-            f"  • 配置文件: riot_api_key\n"
             f"  • 获取 Key: https://developer.riotgames.com/"
         )
 

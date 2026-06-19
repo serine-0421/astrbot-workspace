@@ -23,7 +23,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Image, Plain
 
 from . import image_renderer as img
-from .config import get_blg_uid, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
+from .config import get_blg_uid, get_bilibili_cookie, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
 from .fetcher import api as fetcher_api
 from .fetcher import bilibili, bilibili_dynamic, lolesports, weibo
 from .formatter import message as formatter
@@ -65,6 +65,11 @@ class LoLScheduler:
 
     def start(self) -> None:
         if self._task is None or self._task.done():
+            # 设置 B站 Cookie（绕过风控）
+            cookie = get_bilibili_cookie(self._config) if self._config else ""
+            if cookie:
+                bilibili.set_bilibili_cookie(cookie)
+                bilibili_dynamic.set_bilibili_cookie(cookie)
             self._task = asyncio.create_task(self._run())
             logger.info("[LoLNotifier] Scheduler started.")
 

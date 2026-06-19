@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 import httpx
@@ -20,6 +21,30 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/125.0.0.0 Safari/537.36"
 )
+
+# B站 Cookie
+_bilibili_cookie: str = ""
+
+
+def set_bilibili_cookie(cookie: str) -> None:
+    """设置 B站 Cookie。"""
+    global _bilibili_cookie
+    _bilibili_cookie = (cookie or "").strip()
+
+
+def _build_headers(referer: str = "https://www.bilibili.com") -> dict[str, str]:
+    """构建带 Origin 的请求头。"""
+    headers = {
+        "User-Agent": _USER_AGENT,
+        "Referer": referer,
+        "Origin": "https://www.bilibili.com",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+    cookie = _bilibili_cookie or os.environ.get("BILIBILI_COOKIE", "")
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
 
 
 async def fetch_blg_bp_dynamics() -> list[dict[str, Any]]:
@@ -36,11 +61,7 @@ async def fetch_blg_bp_dynamics() -> list[dict[str, Any]]:
     """
     url = "https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space"
     params = {"host_mid": BLG_UID, "offset": ""}
-    headers = {
-        "User-Agent": _USER_AGENT,
-        "Referer": f"https://space.bilibili.com/{BLG_UID}/dynamic",
-        "Accept": "application/json, text/plain, */*",
-    }
+    headers = _build_headers(f"https://space.bilibili.com/{BLG_UID}/dynamic")
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -48,7 +69,15 @@ async def fetch_blg_bp_dynamics() -> list[dict[str, Any]]:
             data = resp.json()
 
         if data.get("code") != 0:
-            logger.debug(f"[BLG] Dynamic API error {data.get('code')}: {data.get('message')}")
+            code = data.get("code")
+            msg = data.get("message", "")
+            if code == -352:
+                logger.warning(
+                    "[BLG] ⚠️ 动态 API 风控 (-352): Cookie 无效或缺失。"
+                    "请配置 bilibili_cookie"
+                )
+            else:
+                logger.debug(f"[BLG] Dynamic API error {code}: {msg}")
             return []
 
         items = data.get("data", {}).get("items", [])

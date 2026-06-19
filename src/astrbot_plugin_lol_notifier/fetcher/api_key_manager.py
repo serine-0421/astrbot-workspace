@@ -1,20 +1,13 @@
-"""Riot API Key manager with auto-refresh capability.
+"""Riot Developer API Key 自动刷新管理器。
 
-Riot Developer API keys expire every 24 hours. This module:
-- Loads key from config / env var / local cache
-- Validates key periodically via a test request
-- Auto-refreshes using Riot account credentials (if provided)
-- Caches the key locally to survive restarts
+使用内置 Riot 账号（serine0421）自动登录刷新 API Key，插件使用方无需手动配置。
+优先级：环境变量 RIOT_API_KEY > 配置文件 riot_api_key > 自动登录刷新 > 本地缓存
 
-Riot 开发者 API Key 每 24 小时过期，本模块提供自动刷新能力。
-
-Usage:
+用法:
     from .api_key_manager import get_key_manager
-
     mgr = get_key_manager()
-    await mgr.initialize(config)   # 插件启动时
-    key = await mgr.get_key()       # 获取有效 key
-    status = await mgr.check_status()  # 检查状态
+    await mgr.initialize(config, data_dir="data")
+    key = await mgr.get_key()
 """
 
 from __future__ import annotations
@@ -23,7 +16,6 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,13 +23,14 @@ import httpx
 
 from astrbot.api import logger
 
-# ── 常量 ──
+# ── 内置 Riot 账号（插件作者提供） ──
+_BUILTIN_USERNAME = "serine0421"
+_BUILTIN_PASSWORD = "Adastra0421"
 
-# Riot 认证 API
+# ── 常量 ──
 _AUTH_URL = "https://auth.riotgames.com/api/v1/authorization"
-# Riot 开发者门户 API（获取/刷新 Key）
-_DEV_PORTAL_KEY_URL = "https://developer.riotgames.com/api/v1/keys/apikey"
-# 验证 Key 有效性的测试端点
+_DEV_PORTAL = "https://developer.riotgames.com"
+_DEV_KEY_API = f"{_DEV_PORTAL}/api/v1/keys/apikey"
 _VALIDATE_URL = "https://esports-api.lolesports.com/persisted/gw/getLeagues"
 
 _USER_AGENT = (
@@ -46,179 +39,319 @@ _USER_AGENT = (
     "Chrome/125.0.0.0 Safari/537.36"
 )
 
-# Key 过期前多久开始尝试刷新（秒）
-_REFRESH_BEFORE_EXPIRY = 3600  # 1 小时
-# 最小刷新间隔（秒），防止频繁重试
-_MIN_REFRESH_INTERVAL = 300  # 5 分钟
-# 本地缓存文件
 _KEY_CACHE_FILE = "riot_api_key.json"
+_REFRESH_BEFORE_EXPIRY = 3600      # 过期前 1h 刷新
+_MIN_REFRESH_INTERVAL = 300        # 最小刷新间隔 5min
+
+# ── 全局单例 ──
+_key_manager: ApiKeyManager | None = None
+
+
+def get_key_manager() -> "ApiKeyManager":
+    global _key_manager
+    if _key_manager is None:
+        _key_manager = ApiKeyManager()
+    return _key_manager
 
 
 class ApiKeyManager:
-    """Riot API Key 生命周期管理器。"""
+    """Riot API Key 生命周期管理器。自动使用内置账号刷新。"""
 
     def __init__(self) -> None:
         self._key: str = ""
-        self._key_obtained_at: float = 0.0  # 获取 key 的时间戳
-        self._last_validated_at: float = 0.0
+        self._key_obtained_at: float = 0.0
         self._last_refresh_attempt: float = 0.0
         self._is_valid: bool = False
+        self._last_error: str = ""
         self._config: dict[str, Any] = {}
         self._cache_path: Path | None = None
+        self._next_refresh_task: asyncio.Task | None = None
 
-    # ── 初始化 ──
+    # ═══════════════════════════════════════════════════════
+    # 初始化
+    # ═══════════════════════════════════════════════════════
 
-    async def initialize(self, config: dict[str, Any] | None = None, data_dir: str = "data") -> None:
-        """初始化 Key 管理器，按优先级加载 Key。
-
-        优先级: 环境变量 RIOT_API_KEY > 配置文件 riot_api_key > 本地缓存 > 自动刷新
-        """
+    async def initialize(
+        self, config: dict[str, Any] | None = None, data_dir: str = "data"
+    ) -> None:
+        """按优先级加载：环境变量 > 配置文件 > 自动刷新 > 缓存。"""
         self._config = config or {}
+        self._cache_path = Path(data_dir) / _KEY_CACHE_FILE
+        self._cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 确定缓存文件路径
-        cache_dir = Path(data_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        self._cache_path = cache_dir / _KEY_CACHE_FILE
-
-        # 1. 环境变量（最高优先级）
+        # 1) 环境变量 RIOT_API_KEY
         env_key = os.environ.get("RIOT_API_KEY", "").strip()
         if env_key:
+            logger.info("[KeyManager] 使用环境变量 RIOT_API_KEY")
             self._key = env_key
             self._key_obtained_at = time.time()
-            logger.info("[ApiKeyManager] 使用环境变量 RIOT_API_KEY")
             await self._validate()
             return
 
-        # 2. 配置文件
+        # 2) 配置文件 riot_api_key
         config_key = str(self._config.get("riot_api_key", "")).strip()
         if config_key:
+            logger.info("[KeyManager] 使用配置文件 riot_api_key")
             self._key = config_key
             self._key_obtained_at = time.time()
-            logger.info("[ApiKeyManager] 使用配置文件中的 riot_api_key")
-            await self._validate()
-            if self._is_valid:
+            if await self._validate():
                 return
 
-        # 3. 本地缓存
+        # 3) 本地缓存
         cached = self._load_cache()
         if cached:
             self._key = cached.get("key", "")
-            self._key_obtained_at = cached.get("obtained_at", 0.0)
-            if self._key:
-                logger.info("[ApiKeyManager] 使用本地缓存 Key")
-                await self._validate()
-                if self._is_valid:
-                    return
-
-        # 4. 尝试自动刷新
-        if self._has_credentials():
-            logger.info("[ApiKeyManager] 尝试使用 Riot 账号自动获取 Key...")
-            if await self._try_refresh():
+            self._key_obtained_at = cached.get("obtained_at", 0)
+            if self._key and await self._validate():
+                logger.info("[KeyManager] 使用缓存 Key")
+                self._schedule_refresh()
                 return
+            logger.info("[KeyManager] 缓存 Key 已失效")
 
-        logger.warning(
-            "[ApiKeyManager] 未找到有效 API Key！\n"
-            "  请使用 /lol apikey <key> 设置，或设置环境变量 RIOT_API_KEY。\n"
-            "  Riot Dev Key 申请: https://developer.riotgames.com/"
-        )
+        # 4) 自动登录刷新（使用内置账号）
+        logger.info("[KeyManager] 使用内置账号自动刷新...")
+        await self._try_auto_refresh()
 
-    # ── 公共 API ──
+    # ═══════════════════════════════════════════════════════
+    # 公共 API
+    # ═══════════════════════════════════════════════════════
 
     async def get_key(self) -> str:
-        """获取当前有效的 API Key。如果过期则尝试刷新。"""
-        if self._is_expired() and self._has_credentials():
-            await self._try_refresh()
+        """获取当前 Key，过期自动刷新。"""
+        if self._should_refresh():
+            await self._try_auto_refresh()
         return self._key
 
     async def set_key(self, key: str) -> bool:
-        """手动设置 API Key 并验证。"""
-        self._key = key.strip()
+        """手动设置 Key（用户命令）。"""
+        key = key.strip()
+        if not key or len(key) < 10:
+            self._last_error = "Key 格式无效（至少 10 个字符）"
+            return False
+        self._key = key
         self._key_obtained_at = time.time()
-        await self._validate()
-        if self._is_valid:
+        if await self._validate():
             self._save_cache()
-            logger.info("[ApiKeyManager] 手动设置 Key 成功并通过验证")
-        else:
-            logger.warning("[ApiKeyManager] 手动设置 Key 未通过验证，可能无效")
-        return self._is_valid
+            logger.info("[KeyManager] 手动 Key 验证通过")
+            return True
+        self._last_error = "Key 验证失败，请检查是否正确"
+        return False
 
     async def check_status(self) -> dict[str, Any]:
-        """返回 Key 状态信息。"""
+        """返回 Key 状态详情。"""
         if not self._key:
             return {
-                "status": "missing",
-                "message": "未设置 API Key。请使用 /lol apikey <key> 设置。\n"
-                           "获取 Key: https://developer.riotgames.com/",
+                "status": "no_key",
+                "message": (
+                    "⚠️ 尚未获取到 API Key，正在尝试自动刷新...\n\n"
+                    "如持续失败，可手动设置: /lol apikey <你的key>\n"
+                    "获取 Key: https://developer.riotgames.com/"
+                ),
+                "valid": False,
             }
 
-        if self._last_validated_at == 0:
+        if not self._is_valid:
             await self._validate()
 
-        now = time.time()
-        age_hours = (now - self._key_obtained_at) / 3600 if self._key_obtained_at else 0
-        hours_left = max(0, 24 - age_hours)
+        age_hours = (time.time() - self._key_obtained_at) / 3600 if self._key_obtained_at else 0
+        remaining_hours = max(0, 24 - age_hours)
+        masked = self._key[:8] + "****" + self._key[-4:] if len(self._key) > 12 else "****"
+        source = "手动设置" if self._config.get("riot_api_key") else "自动刷新"
 
+        if self._is_valid:
+            return {
+                "status": "valid",
+                "message": (
+                    f"✅ Key 有效\n"
+                    f"  {masked}\n"
+                    f"  已用: {age_hours:.1f}h / 剩余: {remaining_hours:.1f}h\n"
+                    f"  来源: {source}"
+                ),
+                "valid": True,
+            }
         return {
-            "status": "valid" if self._is_valid else "invalid",
+            "status": "invalid",
             "message": (
-                f"✅ API Key 有效\n"
-                f"  已使用: {age_hours:.1f} 小时\n"
-                f"  剩余约: {hours_left:.1f} 小时\n"
-                f"  Key 尾号: ...{self._key[-6:] if len(self._key) > 6 else self._key}"
-            ) if self._is_valid else "❌ API Key 无效或已过期",
-            "valid": self._is_valid,
-            "age_hours": round(age_hours, 1),
-            "hours_left": round(hours_left, 1),
+                f"❌ Key 无效\n"
+                f"  错误: {self._last_error or '验证未通过'}\n"
+                f"  建议: /lol apikey <你的key>"
+            ),
+            "valid": False,
         }
 
     async def force_refresh(self) -> dict[str, Any]:
-        """强制刷新 API Key（需要配置 Riot 账号密码）。"""
-        if not self._has_credentials():
-            return {
-                "success": False,
-                "message": "未配置 Riot 账号密码。\n"
-                           "请在插件配置中设置 riot_username 和 riot_password。",
-            }
+        """强制刷新，忽略间隔限制。"""
+        self._last_refresh_attempt = 0
+        ok = await self._try_auto_refresh()
+        status = await self.check_status()
+        status["refreshed"] = ok
+        return status
 
-        logger.info("[ApiKeyManager] 强制刷新 Key...")
-        success = await self._try_refresh()
-        if success:
-            return {"success": True, "message": "✅ API Key 刷新成功！"}
-        return {
-            "success": False,
-            "message": "❌ 自动刷新失败。\n"
-                       "可能原因: 账号密码错误 / 需要二次验证 / 网络问题。\n"
-                       "请手动获取: https://developer.riotgames.com/",
-        }
+    # ═══════════════════════════════════════════════════════
+    # 自动刷新
+    # ═══════════════════════════════════════════════════════
 
-    # ── 内部方法 ──
+    async def _try_auto_refresh(self) -> bool:
+        """使用内置 Riot 账号登录获取 API Key。"""
+        now = time.time()
+        if now - self._last_refresh_attempt < _MIN_REFRESH_INTERVAL and self._is_valid:
+            return False
+        self._last_refresh_attempt = now
 
-    def _has_credentials(self) -> bool:
-        """检查是否配置了 Riot 登录凭证。"""
-        username = str(self._config.get("riot_username", "")).strip()
-        password = str(self._config.get("riot_password", "")).strip()
-        return bool(username and password)
+        # 优先用配置文件中的账号，否则用内置账号
+        username = str(self._config.get("riot_username", "")).strip() or _BUILTIN_USERNAME
+        password = str(self._config.get("riot_password", "")).strip() or _BUILTIN_PASSWORD
 
-    def _is_expired(self) -> bool:
-        """检查 Key 是否接近过期（>23小时）。"""
-        if not self._key or not self._key_obtained_at:
-            return True
-        age = time.time() - self._key_obtained_at
-        return age > (86400 - _REFRESH_BEFORE_EXPIRY)
+        logger.info(f"[KeyManager] 正在登录 Riot ({username})...")
 
-    async def _validate(self) -> bool:
-        """通过测试请求验证 Key 有效性。"""
-        if not self._key:
-            self._is_valid = False
+        try:
+            async with httpx.AsyncClient(timeout=45.0, follow_redirects=False) as client:
+                # Step 1: Riot SSO 认证
+                auth_resp = await client.put(
+                    _AUTH_URL,
+                    json={
+                        "type": "auth",
+                        "username": username,
+                        "password": password,
+                        "remember": True,
+                        "language": "en_US",
+                    },
+                    headers={
+                        "User-Agent": _USER_AGENT,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                )
+                auth_data = auth_resp.json()
+                auth_type = auth_data.get("type", "")
+
+                if auth_type == "error":
+                    err = auth_data.get("error", "unknown")
+                    logger.warning(f"[KeyManager] 登录错误: {err}")
+                    if "rate" in str(err).lower():
+                        self._last_error = "Riot 登录频率限制，请稍后自动重试"
+                    elif "captcha" in str(auth_data).lower():
+                        self._last_error = "Riot 需要人机验证，自动登录暂不可用。可手动设置 Key"
+                    else:
+                        self._last_error = f"Riot 登录失败: {err}"
+                    return False
+
+                if auth_type == "multifactor":
+                    self._last_error = "Riot 账号需要 2FA，自动登录不可用。请手动设置 Key"
+                    logger.warning("[KeyManager] 需要 2FA")
+                    return False
+
+                if auth_type != "response":
+                    self._last_error = f"未知认证响应: {auth_type}"
+                    logger.warning(f"[KeyManager] 未知响应类型: {auth_type}")
+                    return False
+
+                # Step 2: 从响应中提取 access_token
+                access_token = self._extract_token(auth_data, auth_resp)
+
+                if not access_token:
+                    self._last_error = "认证成功但未获取到 token，可能被 CAPTCHA 拦截"
+                    logger.warning("[KeyManager] 无 access_token")
+                    return False
+
+                logger.info("[KeyManager] 获取到 access_token，正在取 API Key...")
+
+                # Step 3: 用 token 从 Dev Portal 获取 Key
+                new_key = await self._fetch_dev_key(client, access_token)
+                if not new_key:
+                    return False
+
+                # Step 4: 验证并保存
+                self._key = new_key
+                self._key_obtained_at = time.time()
+                if await self._validate():
+                    self._save_cache()
+                    self._schedule_refresh()
+                    logger.info(f"[KeyManager] ✅ 自动刷新成功: {new_key[:8]}****")
+                    self._last_error = ""
+                    return True
+                else:
+                    self._last_error = "刷新后的 Key 验证失败"
+                    return False
+
+        except httpx.HTTPStatusError as e:
+            self._last_error = f"HTTP {e.response.status_code}"
+            logger.warning(f"[KeyManager] HTTP error: {e.response.status_code}")
+            return False
+        except Exception as e:
+            self._last_error = f"网络异常: {e}"
+            logger.warning(f"[KeyManager] 刷新异常: {e}")
             return False
 
-        now = time.time()
-        # 避免过于频繁验证
-        if now - self._last_validated_at < 60 and self._is_valid:
-            return self._is_valid
+    async def _fetch_dev_key(self, client: httpx.AsyncClient, access_token: str) -> str:
+        """用 access_token 从 Dev Portal 获取/刷新 API Key。"""
+        dev_headers = {
+            "User-Agent": _USER_AGENT,
+            "Accept": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        }
 
-        self._last_validated_at = now
+        # 先 GET 现有 key
+        try:
+            resp = await client.get(_DEV_KEY_API, headers=dev_headers)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                key = self._parse_key_from_response(data)
+                if key:
+                    return key
+        except Exception:
+            pass
 
+        # PUT 刷新/创建 key
+        try:
+            resp = await client.put(_DEV_KEY_API, headers=dev_headers)
+            if resp.status_code in (200, 201):
+                data = resp.json()
+                key = self._parse_key_from_response(data)
+                if key:
+                    return key
+        except Exception:
+            pass
+
+        self._last_error = "Dev Portal 未返回有效 Key"
+        return ""
+
+    @staticmethod
+    def _parse_key_from_response(data: Any) -> str:
+        """从 Dev Portal 响应中提取 key 字符串。"""
+        if isinstance(data, list) and data:
+            return data[0].get("apiKey", data[0].get("key", ""))
+        if isinstance(data, dict):
+            return data.get("apiKey", data.get("key", ""))
+        return ""
+
+    def _extract_token(self, auth_data: dict, auth_resp) -> str:
+        """从 Riot SSO 响应中提取 access_token。"""
+        # 从 uri 参数中提取
+        response = auth_data.get("response", {})
+        parameters = response.get("parameters", {})
+        uri = parameters.get("uri", "")
+
+        if "access_token=" in uri:
+            for part in uri.split("&"):
+                if part.startswith("access_token="):
+                    return part.split("=", 1)[1].split("#")[0]
+
+        # 从 cookie 提取
+        for cookie in auth_resp.cookies.jar:
+            if cookie.name in ("access_token", "id_token"):
+                return cookie.value
+
+        return ""
+
+    # ═══════════════════════════════════════════════════════
+    # 验证 & 定时刷新
+    # ═══════════════════════════════════════════════════════
+
+    async def _validate(self) -> bool:
+        """调用 getLeagues 验证 Key 有效性。"""
+        if not self._key:
+            return False
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(
@@ -229,182 +362,68 @@ class ApiKeyManager:
                         "x-api-key": self._key,
                     },
                 )
-                # 200 = 有效, 403 = 无效/过期
-                self._is_valid = resp.status_code == 200
-
-                if resp.status_code == 403:
-                    logger.warning("[ApiKeyManager] API Key 验证失败 (403)，可能已过期")
-                elif resp.status_code == 429:
-                    logger.warning("[ApiKeyManager] Rate limited during validation")
-                    self._is_valid = True  # 限流不代表 key 无效
-
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("data", {}).get("leagues"):
+                        self._is_valid = True
+                        self._last_error = ""
+                        return True
+                    self._last_error = f"响应 200 但无 league 数据"
+                elif resp.status_code == 403:
+                    self._last_error = "HTTP 403: Key 无效或已过期"
+                elif resp.status_code == 401:
+                    self._last_error = "HTTP 401: Key 未授权"
+                else:
+                    self._last_error = f"HTTP {resp.status_code}"
         except Exception as e:
-            logger.warning(f"[ApiKeyManager] Key 验证请求异常: {e}")
-            # 网络异常时保守认为有效
-            self._is_valid = True
+            self._last_error = f"验证异常: {e}"
+        self._is_valid = False
+        return False
 
-        return self._is_valid
+    def _should_refresh(self) -> bool:
+        """判断是否需要刷新（Key 超过 23h）。"""
+        if not self._key:
+            return True
+        age = time.time() - self._key_obtained_at
+        return age > 23 * 3600
 
-    async def _try_refresh(self) -> bool:
-        """尝试通过 Riot 账号自动获取新 Key。"""
-        now = time.time()
-        if now - self._last_refresh_attempt < _MIN_REFRESH_INTERVAL:
-            logger.info("[ApiKeyManager] 距上次刷新尝试不足 5 分钟，跳过")
-            return False
+    def _schedule_refresh(self) -> None:
+        """安排定时后台刷新。"""
+        if self._next_refresh_task and not self._next_refresh_task.done():
+            self._next_refresh_task.cancel()
+        self._next_refresh_task = asyncio.create_task(self._delayed_refresh())
 
-        self._last_refresh_attempt = now
+    async def _delayed_refresh(self) -> None:
+        """在 Key 过期前 1 小时自动刷新。"""
+        await asyncio.sleep(23 * 3600)  # 23h 后刷新
+        logger.info("[KeyManager] 定时刷新触发")
+        await self._try_auto_refresh()
 
-        username = str(self._config.get("riot_username", "")).strip()
-        password = str(self._config.get("riot_password", "")).strip()
-
-        if not username or not password:
-            return False
-
-        try:
-            async with httpx.AsyncClient(
-                timeout=30.0,
-                follow_redirects=True,
-                headers={"User-Agent": _USER_AGENT},
-            ) as client:
-                # Step 1: Riot 账号认证
-                auth_payload = {
-                    "type": "auth",
-                    "username": username,
-                    "password": password,
-                    "persistLogin": True,
-                }
-
-                auth_resp = await client.put(
-                    _AUTH_URL,
-                    json=auth_payload,
-                )
-
-                if auth_resp.status_code != 200:
-                    logger.warning(
-                        f"[ApiKeyManager] Riot 认证失败: HTTP {auth_resp.status_code}"
-                    )
-                    return False
-
-                auth_data = auth_resp.json()
-
-                # 检查是否需要二次验证
-                if auth_data.get("type") == "multifactor":
-                    logger.warning(
-                        "[ApiKeyManager] Riot 账号需要二次验证（2FA），"
-                        "无法自动刷新 Key。请手动获取。"
-                    )
-                    return False
-
-                # 检查认证是否成功
-                if auth_data.get("type") != "response":
-                    error_msg = auth_data.get("error", "未知错误")
-                    logger.warning(f"[ApiKeyManager] Riot 认证返回异常: {error_msg}")
-                    return False
-
-                access_token = (
-                    auth_data.get("success", {}).get("access_token", "")
-                    or auth_data.get("response", {}).get("parameters", {}).get("uri", "")
-                )
-
-                if "access_token" not in str(auth_data):
-                    logger.warning(
-                        "[ApiKeyManager] 认证响应中未找到 access_token，"
-                        "可能需要人机验证（CAPTCHA）"
-                    )
-                    return False
-
-                # Step 2: 访问开发者门户获取/刷新 Key
-                logger.info("[ApiKeyManager] Riot 认证成功，正在获取 API Key...")
-
-                # 先获取当前 key 信息
-                try:
-                    key_info = await client.get(_DEV_PORTAL_KEY_URL)
-                    if key_info.status_code == 200:
-                        key_data = key_info.json()
-                        new_key = key_data.get("apiKey", key_data.get("key", ""))
-                        if new_key:
-                            self._key = new_key
-                            self._key_obtained_at = time.time()
-                            self._save_cache()
-                            await self._validate()
-                            logger.info(
-                                f"[ApiKeyManager] ✅ 成功获取 API Key: ...{new_key[-6:]}"
-                            )
-                            return True
-                except Exception:
-                    pass
-
-                # 尝试重新生成 key (PUT)
-                try:
-                    regen_resp = await client.put(_DEV_PORTAL_KEY_URL)
-                    if regen_resp.status_code == 200:
-                        regen_data = regen_resp.json()
-                        new_key = regen_data.get("apiKey", regen_data.get("key", ""))
-                        if new_key:
-                            self._key = new_key
-                            self._key_obtained_at = time.time()
-                            self._save_cache()
-                            await self._validate()
-                            logger.info(
-                                f"[ApiKeyManager] ✅ 成功刷新 API Key: ...{new_key[-6:]}"
-                            )
-                            return True
-                except Exception:
-                    pass
-
-                logger.warning("[ApiKeyManager] 认证成功但无法获取 API Key")
-                return False
-
-        except httpx.RequestError as e:
-            logger.error(f"[ApiKeyManager] 刷新请求网络错误: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"[ApiKeyManager] 刷新异常: {e}", exc_info=True)
-            return False
-
-    # ── 缓存管理 ──
+    # ═══════════════════════════════════════════════════════
+    # 缓存
+    # ═══════════════════════════════════════════════════════
 
     def _load_cache(self) -> dict[str, Any] | None:
-        """从本地文件加载缓存的 Key。"""
         if not self._cache_path or not self._cache_path.exists():
             return None
         try:
-            with open(self._cache_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = json.loads(self._cache_path.read_text(encoding="utf-8"))
             if data.get("key"):
                 return data
-        except Exception as e:
-            logger.debug(f"[ApiKeyManager] 读取缓存失败: {e}")
+        except Exception:
+            pass
         return None
 
     def _save_cache(self) -> None:
-        """保存 Key 到本地缓存文件。"""
-        if not self._cache_path or not self._key:
+        if not self._cache_path:
             return
         try:
-            with open(self._cache_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "key": self._key,
-                        "obtained_at": self._key_obtained_at,
-                        "saved_at": time.time(),
-                    },
-                    f,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-        except Exception as e:
-            logger.debug(f"[ApiKeyManager] 保存缓存失败: {e}")
-
-
-# ── 全局单例 ──
-
-_manager: ApiKeyManager | None = None
-
-
-def get_key_manager() -> ApiKeyManager:
-    """获取全局 Key 管理器单例。"""
-    global _manager
-    if _manager is None:
-        _manager = ApiKeyManager()
-    return _manager
+            self._cache_path.write_text(
+                json.dumps({
+                    "key": self._key,
+                    "obtained_at": self._key_obtained_at,
+                }, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass

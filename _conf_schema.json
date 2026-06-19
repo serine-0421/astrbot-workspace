@@ -53,6 +53,12 @@
     "hint": "B 站 API 轮询间隔，默认 60 秒。注意不要太短以免触发限频。",
     "default": 60
   },
+  "bilibili_cookie": {
+    "description": "B站 Cookie",
+    "type": "string",
+    "hint": "B站登录 Cookie，用于绕过 -352 风控拦截。从浏览器 F12 → Application → Cookies 复制完整 Cookie 字符串。也可设环境变量 BILIBILI_COOKIE。",
+    "default": ""
+  },
   "weibo_uids": {
     "description": "微博监控账号 UID 列表",
     "type": "list",

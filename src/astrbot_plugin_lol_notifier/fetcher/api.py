@@ -103,8 +103,10 @@ async def get_match_bp(
 
     # 先找到 match_id
     sched = await fetch_schedule(league=league_n)
-    if not sched.ok or not sched.value:
-        return Failure(error="无法获取赛程数据。")
+    if not sched.ok:
+        return sched  # 传递原始错误
+    if not sched.value:
+        return Failure(error="赛程数据为空。")
 
     target = _pick_match(sched.value, round_number)
     if target is None:
@@ -145,8 +147,10 @@ async def get_match_detail(
     from .lolesports import fetch_match_detail, fetch_schedule
 
     sched = await fetch_schedule(league=league_n)
-    if not sched.ok or not sched.value:
-        return Failure(error="无法获取赛程数据。")
+    if not sched.ok:
+        return sched  # 传递原始错误
+    if not sched.value:
+        return Failure(error="赛程数据为空。")
 
     target = _pick_match(sched.value, round_number)
     if target is None:

@@ -85,6 +85,11 @@ async def _fetch_league_ids() -> dict[str, str]:
         return _league_ids_cache
 
     data = await _request("getLeagues", params={"hl": "en-US"})
+    if "_error" in data:
+        logger.warning(f"[LoLEsports] getLeagues failed: {data['_error']}")
+        if _league_ids_cache is not None:
+            return _league_ids_cache  # 返回缓存
+        return {}
     leagues = data.get("leagues", [])
     _league_ids_cache = {}
     _league_names_cache = {}
@@ -180,9 +185,7 @@ async def _request(
     params: dict | None = None,
     base: str = _BASE_SCHEDULE,
 ) -> dict[str, Any]:
-    """统一请求封装。
-    endpoint 可以是绝对 URL 或相对路径（相对 base）。
-    """
+    """统一请求封装。返回 data dict，出错返回含 _error 字段的 dict。"""
     if endpoint.startswith("http"):
         url = endpoint
     else:
@@ -196,21 +199,24 @@ async def _request(
         return data.get("data", data)
     except httpx.HTTPStatusError as e:
         status = e.response.status_code
-        detail = e.response.text[:200]
+        detail = e.response.text[:300]
+        error_msg = f"HTTP {status}"
         if status == 403:
-            logger.error(
-                f"[LoLEsports] 403 Forbidden → API Key 可能已过期，"
-                f"请前往 https://developer.riotgames.com/ 重新生成，"
-                f"并设置环境变量 RIOT_API_KEY。"
-            )
+            error_msg += " — API Key 无效或已过期，请使用 /lol apikey 设置新 Key"
+        elif status == 401:
+            error_msg += " — API Key 未授权"
         elif status == 429:
-            logger.warning("[LoLEsports] 429 Rate Limited — 请降低请求频率。")
+            error_msg += " — 请求频率过高，请稍后重试"
+        elif status >= 500:
+            error_msg += " — LoL Esports 服务器错误，请稍后重试"
         else:
-            logger.debug(f"[LoLEsports] HTTP {status} for {url}: {detail}")
-        return {}
+            error_msg += f" — {detail}"
+        logger.warning(f"[LoLEsports] {error_msg}")
+        return {"_error": error_msg, "_status": status}
     except Exception as exc:
-        logger.debug(f"[LoLEsports] Request failed: {url} — {exc}")
-        return {}
+        error_msg = f"网络请求异常: {exc}"
+        logger.debug(f"[LoLEsports] {error_msg}")
+        return {"_error": error_msg, "_status": 0}
 
 
 # ═══════════════════════════════════════════════════
@@ -232,6 +238,8 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
         )
 
     data = await _request("getSchedule", params={"hl": "zh-CN", "leagueId": lid})
+    if "_error" in data:
+        return Failure(error=data["_error"])
     schedule_data = data.get("schedule", data)
 
     events = schedule_data.get("events", [])
@@ -271,6 +279,8 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
 async def fetch_live_matches(league: str | None = None) -> LiveResult:
     """获取正在进行的比赛（可选筛选赛区）。"""
     data = await _request("getLive", params={"hl": "zh-CN"})
+    if "_error" in data:
+        return Failure(error=data["_error"])
     schedule = data.get("schedule", data)
     events = schedule.get("events", [])
 
@@ -422,6 +432,8 @@ async def fetch_standings(league: str = "lck") -> StandingsResult:
     data = await _request(
         "getStandings", params={"hl": "zh-CN", "tournamentId": lid}
     )
+    if "_error" in data:
+        return Failure(error=data["_error"])
 
     standings_list = data.get("standings", [])
     entries: list[StandingEntry] = []
@@ -452,6 +464,9 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
     data = await _request(
         "getEventDetails", params={"hl": "zh-CN", "id": match_id}
     )
+    if "_error" in data:
+        logger.warning(f"[LoLEsports] getEventDetails failed: {data['_error']}")
+        return None
     event = data.get("event", data)
     if not event:
         return None
