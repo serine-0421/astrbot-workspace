@@ -15,13 +15,14 @@ League ID 通过 getLeagues 动态获取，无需硬编码。
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from astrbot.api import logger
+
+from .api_key_manager import get_key_manager
 from ..models import (
     BPEntry,
     Failure,
@@ -49,28 +50,25 @@ _BASE_SCHEDULE = "https://esports-api.lolesports.com/persisted/gw"
 _BASE_FEED = "https://feed.lolesports.com/livestats/v1"
 
 # ── API Key 管理 ──
-# 优先级: 环境变量 RIOT_API_KEY > 内置 Web Client Key
-# 内置 Key 来自 lolesports.com 网页端（公开可用，非 Riot Dev Key）
-# 如需使用自己的 Riot Dev Key，设置环境变量 RIOT_API_KEY
-# Riot Dev Key 申请地址: https://developer.riotgames.com/
-
-_BUILTIN_API_KEY = "0TvQnueqKa5mxJntVWt0w4LpLfEkrV1Ta8rQBb9Z"
-
-_LOL_API_KEY: str = os.environ.get("RIOT_API_KEY", _BUILTIN_API_KEY)
+# 使用 ApiKeyManager 统一管理，支持：
+#   1. 环境变量 RIOT_API_KEY（最高优先级）
+#   2. 插件配置 riot_api_key
+#   3. 本地缓存
+#   4. Riot 账号自动登录刷新（需配置 riot_username / riot_password）
+# Riot Dev Key 申请: https://developer.riotgames.com/
 
 
-def get_api_key() -> str:
-    """获取当前 API Key（优先环境变量）。"""
-    global _LOL_API_KEY
-    _LOL_API_KEY = os.environ.get("RIOT_API_KEY", _LOL_API_KEY)
-    return _LOL_API_KEY
+async def _get_api_key() -> str:
+    """异步获取当前有效的 API Key。"""
+    return await get_key_manager().get_key()
 
 
-def set_api_key(key: str) -> None:
-    """运行时设置 API Key（不持久化）。"""
-    global _LOL_API_KEY
-    _LOL_API_KEY = key
+async def set_api_key(key: str) -> bool:
+    """运行时设置 API Key。"""
+    mgr = get_key_manager()
+    ok = await mgr.set_key(key)
     _reset_client()
+    return ok
 
 
 # ── League ID 缓存 ──
@@ -126,7 +124,11 @@ def league_name_by_id(lid: str) -> str:
 _client: httpx.AsyncClient | None = None
 
 
+_client_key_hash: str = ""
+
+
 def _get_client() -> httpx.AsyncClient:
+    """获取客户端（同步创建，Key 由第一次请求时更新）。"""
     global _client
     if _client is None:
         _client = httpx.AsyncClient(
@@ -134,9 +136,28 @@ def _get_client() -> httpx.AsyncClient:
             headers={
                 "User-Agent": _USER_AGENT,
                 "Accept": "application/json",
-                "x-api-key": get_api_key(),
             },
         )
+    return _client
+
+
+async def _get_client_async() -> httpx.AsyncClient:
+    """获取带有效 API Key 的客户端（异步）。"""
+    global _client, _client_key_hash
+    key = await _get_api_key()
+    if key:
+        if _client is None or _client_key_hash != key:
+            if _client:
+                await _client.aclose()
+            _client = httpx.AsyncClient(
+                timeout=15.0,
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Accept": "application/json",
+                    "x-api-key": key,
+                },
+            )
+            _client_key_hash = key
     return _client
 
 
@@ -168,7 +189,7 @@ async def _request(
         url = f"{base}/{endpoint}"
 
     try:
-        client = _get_client()
+        client = await _get_client_async()
         resp = await client.get(url, params=params or {})
         resp.raise_for_status()
         data: dict = resp.json()

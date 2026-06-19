@@ -8,6 +8,7 @@ from .api import (
     get_schedule,
     get_standings,
 )
+from .api_key_manager import get_key_manager
 from .bilibili import (
     fetch_bilibili_comments,
     fetch_bilibili_live_status,
@@ -24,6 +25,7 @@ from .lolesports import (
     fetch_match_detail as lolesports_fetch_match_detail,
     fetch_schedule as lolesports_fetch_schedule,
     fetch_standings as lolesports_fetch_standings,
+    set_api_key as lolesports_set_api_key,
 )
 from .weibo import fetch_weibo_announcements, fetch_weibo_by_keyword, fetch_weibo_posters
 
@@ -35,6 +37,9 @@ __all__ = [
     "get_match_bp",
     "get_match_detail",
     "get_standings",
+    # API Key 管理
+    "get_key_manager",
+    "lolesports_set_api_key",
     # LoL Esports 原始抓取函数
     "lolesports_close_session",
     "lolesports_fetch_schedule",

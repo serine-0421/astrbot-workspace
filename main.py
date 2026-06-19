@@ -6,12 +6,14 @@ Commands (prefix /lol):
     /lol help
     /lol schedule [lck|lpl] [regular|playoff] [season]
     /lol next [lck|lpl] [regular|playoff] [season]
+    /lol live [lck|lpl]
     /lol result [lck|lpl] [regular|playoff] [round]
     /lol bp [lck|lpl] [regular|playoff] [round]
     /lol detail [lck|lpl] [regular|playoff] [round]
     /lol standings [lck|lpl] [regular|playoff] [season]
     /lol subscribe
     /lol unsubscribe
+    /lol apikey [key]        查看/设置 Riot API Key 状态
     /lol test [season]
 """
 
@@ -25,6 +27,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from .src.astrbot_plugin_lol_notifier.fetcher import api
+from .src.astrbot_plugin_lol_notifier.fetcher.api_key_manager import get_key_manager
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
 from .src.astrbot_plugin_lol_notifier.models import Failure, Success
@@ -51,6 +54,7 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
 管理命令：
   /lol subscribe     订阅当前会话的自动推送
   /lol unsubscribe   取消当前会话的自动推送
+  /lol apikey [key]  查看 API Key 状态，或手动设置 Key
   /lol test [season] 测试插件各项查询功能
 
 已实现的自动推送（订阅后自动触发）：
@@ -117,7 +121,16 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result("❌ 请求失败，请稍后重试。")
 
     async def initialize(self) -> None:
-        """Start the background notification scheduler."""
+        """Initialize API Key manager and start scheduler."""
+        # 初始化 API Key 管理器（赛程/排名等功能依赖此 Key）
+        km = get_key_manager()
+        await km.initialize(
+            config=dict(self.config) if self.config else None,
+            data_dir="data",
+        )
+        status = await km.check_status()
+        logger.info(f"[LoLNotifier] API Key: {status['status']}")
+
         self.scheduler.start()
         logger.info("[LoLNotifier] Plugin initialized.")
 
@@ -327,6 +340,38 @@ class LoLNotifierPlugin(Star):
             yield event.plain_result("✅ 已取消订阅 LoL 自动推送。")
         else:
             yield event.plain_result("ℹ️ 当前会话尚未订阅。发送 /lol subscribe 可以订阅。")
+
+    @lol.command("apikey")
+    async def lol_apikey(
+        self,
+        event: AstrMessageEvent,
+        key: str = "",
+    ):
+        """查看或设置 Riot API Key 状态"""
+        km = get_key_manager()
+
+        # 如果带了 key 参数，尝试设置
+        if key.strip() and len(key.strip()) > 10:
+            ok = await km.set_key(key.strip())
+            if ok:
+                yield event.plain_result("✅ API Key 设置成功并通过验证！")
+            else:
+                yield event.plain_result(
+                    "⚠️ API Key 已设置但验证未通过，可能无效。\n"
+                    "请检查 Key 是否正确: https://developer.riotgames.com/"
+                )
+            return
+
+        # 查看状态
+        status = await km.check_status()
+        yield event.plain_result(
+            f"🔑 Riot API Key 状态\n\n{status['message']}\n\n"
+            f"💡 提示:\n"
+            f"  • 设置 Key: /lol apikey <你的key>\n"
+            f"  • 环境变量: RIOT_API_KEY\n"
+            f"  • 配置文件: riot_api_key\n"
+            f"  • 获取 Key: https://developer.riotgames.com/"
+        )
 
     @lol.command("test")
     async def lol_test(self, event: AstrMessageEvent, season: str = "current"):
