@@ -299,3 +299,416 @@ def format_live_list(matches: list[LiveMatch]) -> str:
     for i, live in enumerate(matches, 1):
         lines.append(f"{i}. [{live.league_name}] {live.match_name}  ({live.score})  {live.status}")
     return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  战队 / 选手 格式化（新端点）
+# ═══════════════════════════════════════════════════
+
+def format_team_info(data: dict) -> str:
+    """格式化单个战队信息。"""
+    name = data.get("name", data.get("code", "未知战队"))
+    region = data.get("region", data.get("league", ""))
+    slug = data.get("slug", "")
+    image = data.get("image", data.get("logoUrl", ""))
+    lines = [f"🏢 {name}"]
+    if region:
+        lines.append(f"赛区: {region}")
+    if slug:
+        lines.append(f"标识: {slug}")
+    if image:
+        lines.append(f"队标: {image}")
+    return "\n".join(lines)
+
+
+def format_team_roster(data: dict) -> str:
+    """格式化战队阵容。"""
+    team_name = data.get("team", {}).get("name", "未知战队") if isinstance(data.get("team"), dict) else "未知战队"
+    players = data.get("players", data.get("roster", []))
+    if not players:
+        return f"📋 {team_name} 暂无阵容数据。"
+    lines = [f"📋 {team_name} 战队阵容\n"]
+    for p in players:
+        name = p.get("name", p.get("handle", p.get("player", {}).get("name", "?")) if isinstance(p.get("player"), dict) else "?")
+        role = p.get("role", p.get("position", "—"))
+        lines.append(f"  {role:6} | {name}")
+    return "\n".join(lines)
+
+
+def format_team_matches(data: dict) -> str:
+    """格式化战队近期比赛。"""
+    matches = data.get("matches", data.get("events", []))
+    if not matches:
+        return "📅 暂无近期比赛数据。"
+    lines = [f"📅 近期比赛 ({len(matches)} 场)\n"]
+    for m in matches[:10]:
+        blue = m.get("blue", m.get("blueTeam", {}))
+        red = m.get("red", m.get("redTeam", {}))
+        if isinstance(blue, dict):
+            blue = blue.get("name", blue.get("code", "蓝方"))
+        if isinstance(red, dict):
+            red = red.get("name", red.get("code", "红方"))
+        status = m.get("status", m.get("state", ""))
+        date = m.get("date", m.get("startDate", m.get("startTime", "")))
+        winner = m.get("winner", "")
+        icon = "✅" if status in ("completed", "finished") else "⏳"
+        lines.append(f"{icon} {blue} vs {red}  {winner or ''}  {date}")
+    return "\n".join(lines)
+
+
+def format_player_info(data: dict) -> str:
+    """格式化单个选手信息。"""
+    name = data.get("name", data.get("handle", "未知选手"))
+    team = data.get("team", {})
+    if isinstance(team, dict):
+        team = team.get("name", team.get("code", ""))
+    role = data.get("role", data.get("position", ""))
+    nationality = data.get("nationality", data.get("country", ""))
+    image = data.get("image", data.get("photoUrl", ""))
+    lines = [f"👤 {name}"]
+    if team:
+        lines.append(f"战队: {team}")
+    if role:
+        lines.append(f"位置: {role}")
+    if nationality:
+        lines.append(f"国籍: {nationality}")
+    if image:
+        lines.append(f"照片: {image}")
+    return "\n".join(lines)
+
+
+def format_player_stats(data: dict) -> str:
+    """格式化选手统计数据。"""
+    name = data.get("name", data.get("player", {}).get("name", "未知选手") if isinstance(data.get("player"), dict) else "未知选手")
+    kda = data.get("kda", "")
+    kills = data.get("kills", data.get("avgKills", 0))
+    deaths = data.get("deaths", data.get("avgDeaths", 0))
+    assists = data.get("assists", data.get("avgAssists", 0))
+    cs = data.get("cs", data.get("csPerMin", data.get("cspm", 0)))
+    games = data.get("gamesPlayed", data.get("games", 0))
+    kp = data.get("killParticipation", data.get("kp", ""))
+    lines = [f"📊 {name} 统计数据\n"]
+    if kda:
+        lines.append(f"KDA: {kda}")
+    lines.append(f"场均击杀: {kills}  |  场均死亡: {deaths}  |  场均助攻: {assists}")
+    if cs:
+        lines.append(f"场均补刀: {cs}")
+    if kp:
+        lines.append(f"参团率: {kp}")
+    lines.append(f"比赛场次: {games}")
+    return "\n".join(lines)
+
+
+def format_player_champions(data: dict) -> str:
+    """格式化选手英雄池。"""
+    champs = data.get("champions", data.get("mostPlayed", []))
+    name = data.get("player", {}).get("name", "") if isinstance(data.get("player"), dict) else ""
+    header = f"🎮 {name} 英雄池" if name else "🎮 英雄池"
+    if not champs:
+        return f"{header}\n暂无数据。"
+    lines = [f"{header}\n"]
+    for c in champs[:10]:
+        champ_name = c.get("champion", c.get("name", "?"))
+        games = c.get("games", c.get("gamesPlayed", 0))
+        wins = c.get("wins", 0)
+        wr = f"{wins / games * 100:.0f}%" if games > 0 else "—"
+        lines.append(f"  {champ_name}: {games}场  {wr}胜率")
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  锦标赛 / 英雄 / 排行榜 格式化
+# ═══════════════════════════════════════════════════
+
+def format_tournament_info(data: dict) -> str:
+    """格式化锦标赛信息。"""
+    name = data.get("name", data.get("title", "未知赛事"))
+    league = data.get("league", "")
+    season = data.get("season", "")
+    status = data.get("status", "")
+    start = data.get("startDate", data.get("start", ""))
+    end = data.get("endDate", data.get("end", ""))
+    lines = [f"🏆 {name}"]
+    if league:
+        lines.append(f"联赛: {league}")
+    if season:
+        lines.append(f"赛季: {season}")
+    if status:
+        lines.append(f"状态: {status}")
+    if start:
+        lines.append(f"开始: {start}")
+    if end:
+        lines.append(f"结束: {end}")
+    return "\n".join(lines)
+
+
+def format_tournament_standings(data: dict) -> str:
+    """格式化锦标赛积分榜。"""
+    standings = data.get("standings", data.get("results", []))
+    if not standings:
+        return "📊 暂无积分榜数据。"
+    name = data.get("name", "")
+    lines = [f"📊 {name} 积分榜\n" if name else "📊 积分榜\n"]
+    for i, s in enumerate(standings[:20], 1):
+        team = s.get("team", {})
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", "?"))
+        w = s.get("wins", 0)
+        l = s.get("losses", 0)
+        pts = s.get("points", 0)
+        lines.append(f"  {i:>2}. {team}  {w}胜-{l}负  {pts}分")
+    return "\n".join(lines)
+
+
+def format_tournament_bracket(data: dict) -> str:
+    """格式化锦标赛淘汰赛对阵。"""
+    bracket = data.get("bracket", data)
+    if not bracket:
+        return "🏆 暂无淘汰赛对阵数据。"
+    lines = ["🏆 淘汰赛对阵\n"]
+    rounds = bracket.get("rounds", bracket.get("stages", []))
+    for r in rounds:
+        rname = r.get("name", r.get("round", ""))
+        if rname:
+            lines.append(f"━━ {rname} ━━")
+        for m in r.get("matches", []):
+            t1 = m.get("team1", m.get("teamA", {}))
+            t2 = m.get("team2", m.get("teamB", {}))
+            if isinstance(t1, dict):
+                t1 = t1.get("name", t1.get("code", "?"))
+            if isinstance(t2, dict):
+                t2 = t2.get("name", t2.get("code", "?"))
+            winner = m.get("winner", "")
+            lines.append(f"  {t1} vs {t2}  → {winner}" if winner else f"  {t1} vs {t2}")
+    return "\n".join(lines)
+
+
+def format_tournament_mvp(data: dict) -> str:
+    """格式化锦标赛 MVP。"""
+    mvp = data.get("mvp", data)
+    if isinstance(mvp, list):
+        if not mvp:
+            return "🏅 暂无 MVP 数据。"
+        lines = ["🏅 MVP 列表\n"]
+        for m in mvp[:10]:
+            name = m.get("name", m.get("player", "?"))
+            team = m.get("team", "")
+            lines.append(f"  {name}" + (f" ({team})" if team else ""))
+        return "\n".join(lines)
+    name = mvp.get("name", mvp.get("player", "?"))
+    team = mvp.get("team", "")
+    return f"🏅 MVP: {name}" + (f" ({team})" if team else "")
+
+
+def format_champion_stats(data: dict, limit: int = 10) -> str:
+    """格式化英雄统计。"""
+    champs = data.get("champions", data.get("data", []))
+    if not champs:
+        return "🎮 暂无英雄统计数据。"
+    lines = ["🎮 英雄统计\n"]
+    for c in champs[:limit]:
+        name = c.get("champion", c.get("name", "?"))
+        games = c.get("games", c.get("gamesPlayed", 0))
+        wins = c.get("wins", 0)
+        kda = c.get("kda", "")
+        wr = f"{wins / games * 100:.1f}%" if games > 0 else "—"
+        parts = [f"  {name}: {games}场  {wr}"]
+        if kda:
+            parts.append(f"KDA {kda}")
+        lines.append("  |  ".join(parts))
+    return "\n".join(lines)
+
+
+def format_champion_presence(data: dict, limit: int = 10) -> str:
+    """格式化英雄 Pick/Ban 率。"""
+    champs = data.get("champions", data.get("data", []))
+    if not champs:
+        return "📋 暂无 Pick/Ban 数据。"
+    lines = ["📋 英雄 Pick/Ban 率\n"]
+    for c in champs[:limit]:
+        name = c.get("champion", c.get("name", "?"))
+        presence = c.get("presence", c.get("presenceRate", c.get("pb", "")))
+        pick = c.get("pick", c.get("pickRate", ""))
+        ban = c.get("ban", c.get("banRate", ""))
+        lines.append(f"  {name}: P/B {presence}")
+        if pick:
+            lines[-1] += f"  (P:{pick} B:{ban})"
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  排行榜 / 搜索 / 趋势 格式化
+# ═══════════════════════════════════════════════════
+
+def format_gpr_rankings(data: dict, limit: int = 20) -> str:
+    """格式化全球战力排名。"""
+    rankings = data.get("rankings", data.get("teams", []))
+    if not rankings:
+        return "🌍 暂无全球战力排名数据。"
+    lines = [f"🌍 全球战力排名 (Top {min(limit, len(rankings))})\n"]
+    for i, r in enumerate(rankings[:limit], 1):
+        team = r.get("team", r.get("name", "?"))
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", "?"))
+        pts = r.get("points", r.get("score", r.get("rating", "")))
+        lines.append(f"  {i:>2}. {team}  {pts}")
+    return "\n".join(lines)
+
+
+def format_player_rankings(data: dict, metric: str = "kda", limit: int = 15) -> str:
+    """格式化选手排名。"""
+    rankings = data.get("rankings", data.get("players", data.get("data", [])))
+    if not rankings:
+        return f"📊 暂无{metric}排名数据。"
+    lines = [f"📊 选手{metric.upper()}排名 (Top {min(limit, len(rankings))})\n"]
+    for i, r in enumerate(rankings[:limit], 1):
+        name = r.get("player", r.get("name", "?"))
+        if isinstance(name, dict):
+            name = name.get("name", name.get("handle", "?"))
+        val = r.get("value", r.get(metric, r.get("score", "")))
+        team = r.get("team", "")
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", ""))
+        entry = f"  {i:>2}. {name}"
+        if team:
+            entry += f" ({team})"
+        entry += f" — {val}"
+        lines.append(entry)
+    return "\n".join(lines)
+
+
+def format_leaderboard(data: dict, metric: str = "", limit: int = 15) -> str:
+    """格式化通用排行榜（KDA/击杀/死亡/助攻/补刀/经济/视野/伤害）。"""
+    entries = data.get("leaderboard", data.get("rankings", data.get("players", data.get("data", []))))
+    if not entries:
+        return f"📊 暂无{metric}排行榜数据。"
+    label = metric.upper() if metric else "数据"
+    lines = [f"📊 {label}排行榜 (Top {min(limit, len(entries))})\n"]
+    for i, entry in enumerate(entries[:limit], 1):
+        player = entry.get("player", entry.get("name", "?"))
+        if isinstance(player, dict):
+            player = player.get("name", player.get("handle", "?"))
+        val = entry.get("value", entry.get("score", entry.get(metric.lower(), "")))
+        team = entry.get("team", "")
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", ""))
+        parts = [player]
+        if team:
+            parts.append(f"({team})")
+        parts.append(str(val))
+        lines.append(f"  {i:>2}. {' '.join(parts)}")
+    return "\n".join(lines)
+
+
+def format_search_teams(data: dict) -> str:
+    """格式化战队搜索结果。"""
+    teams = data.get("teams", data.get("results", data.get("data", [])))
+    if not teams:
+        return "🔍 未找到匹配的战队。"
+    lines = [f"🔍 战队搜索结果 ({len(teams)} 条)\n"]
+    for t in teams[:10]:
+        name = t.get("name", t.get("code", "?"))
+        region = t.get("region", t.get("league", ""))
+        sid = t.get("id", t.get("teamId", ""))
+        lines.append(f"  {name}" + (f" ({region})" if region else "") + (f"  [{sid}]" if sid else ""))
+    return "\n".join(lines)
+
+
+def format_search_players(data: dict) -> str:
+    """格式化选手搜索结果。"""
+    players = data.get("players", data.get("results", data.get("data", [])))
+    if not players:
+        return "🔍 未找到匹配的选手。"
+    lines = [f"🔍 选手搜索结果 ({len(players)} 条)\n"]
+    for p in players[:10]:
+        name = p.get("name", p.get("handle", "?"))
+        team = p.get("team", {})
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", ""))
+        rid = p.get("id", p.get("playerId", ""))
+        parts = [f"  {name}"]
+        if team:
+            parts.append(f"({team})")
+        if rid:
+            parts.append(f"[{rid}]")
+        lines.append(" ".join(parts))
+    return "\n".join(lines)
+
+
+def format_trending(data: dict) -> str:
+    """格式化热门趋势。"""
+    if not data:
+        return "🔥 暂无热门趋势数据。"
+    lines = ["🔥 热门趋势\n"]
+    for key, items in data.items():
+        if isinstance(items, list) and items:
+            lines.append(f"  {key}: {len(items)} 项")
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  历史 / 转会 / 记录 格式化
+# ═══════════════════════════════════════════════════
+
+def format_history(data: dict, title: str = "历史数据") -> str:
+    """格式化历史赛事数据。"""
+    winners = data.get("winners", data.get("results", data.get("data", [])))
+    if not winners:
+        return f"📜 {title}: 暂无数据。"
+    lines = [f"📜 {title}\n"]
+    for w in winners[:15]:
+        year = w.get("year", w.get("season", ""))
+        team = w.get("winner", w.get("team", w.get("name", "?")))
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", "?"))
+        lines.append(f"  {year}: {team}")
+    return "\n".join(lines)
+
+
+def format_transfers(data: dict) -> str:
+    """格式化转会信息。"""
+    transfers = data.get("transfers", data.get("data", []))
+    if not transfers:
+        return "🔄 暂无转会数据。"
+    lines = [f"🔄 转会信息 ({len(transfers)} 条)\n"]
+    for t in transfers[:15]:
+        player = t.get("player", t.get("name", "?"))
+        if isinstance(player, dict):
+            player = player.get("name", player.get("handle", "?"))
+        from_team = t.get("from", t.get("fromTeam", ""))
+        to_team = t.get("to", t.get("toTeam", ""))
+        if isinstance(from_team, dict):
+            from_team = from_team.get("name", from_team.get("code", ""))
+        if isinstance(to_team, dict):
+            to_team = to_team.get("name", to_team.get("code", ""))
+        lines.append(f"  {player}: {from_team} → {to_team}")
+    return "\n".join(lines)
+
+
+def format_records(data: dict) -> str:
+    """格式化赛事记录/里程碑。"""
+    records = data.get("records", data.get("data", data.get("milestones", [])))
+    if not records:
+        return "🏅 暂无赛事记录。"
+    lines = ["🏅 赛事记录\n"]
+    for r in records[:15]:
+        title = r.get("title", r.get("record", r.get("description", "")))
+        holder = r.get("holder", r.get("player", r.get("team", "")))
+        val = r.get("value", r.get("score", ""))
+        line = f"  {title}"
+        if holder:
+            line += f" — {holder}"
+        if val:
+            line += f" ({val})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_json_result(data: Any, title: str = "结果") -> str:
+    """通用 JSON 格式化（fallback）。"""
+    import json
+    if isinstance(data, dict):
+        return f"{title}:\n{json.dumps(data, ensure_ascii=False, indent=2)}"
+    if isinstance(data, (list, str, int, float)):
+        return f"{title}: {data}"
+    return f"{title}: (无数据)"

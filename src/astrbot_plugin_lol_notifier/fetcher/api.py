@@ -11,6 +11,7 @@ from ..models import (
     BpResult,
     DetailResult,
     Failure,
+    JsonResult,
     LeagueMatch,
     MatchDetail,
     ResultResult,
@@ -185,7 +186,426 @@ async def get_standings(
     return await fetch_standings(league=league_n)
 
 
-# ── 工具 ──
+# ═══════════════════════════════════════════════════
+#  赛程扩展
+# ═══════════════════════════════════════════════════
+
+async def get_today_schedule(league: str = "") -> JsonResult:
+    """获取今日赛程。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_today_schedule
+    return await fetch_today_schedule(league=ln or "")
+
+
+async def get_week_schedule(league: str = "") -> JsonResult:
+    """获取本周赛程。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_week_schedule
+    return await fetch_week_schedule(league=ln or "")
+
+
+async def get_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
+    """获取即将到来的比赛。"""
+    ln = normalize_league(league)
+    if ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_upcoming_matches
+    return await fetch_upcoming_matches(league=ln, limit=limit)
+
+
+async def get_completed_matches(league: str, limit: int = 10) -> JsonResult:
+    """获取已完成的比赛。"""
+    ln = normalize_league(league)
+    if ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_completed_matches
+    return await fetch_completed_matches(league=ln, limit=limit)
+
+
+# ═══════════════════════════════════════════════════
+#  联赛信息
+# ═══════════════════════════════════════════════════
+
+async def get_all_leagues() -> JsonResult:
+    """获取所有联赛列表。"""
+    from .lolesports import fetch_all_leagues
+    return await fetch_all_leagues()
+
+
+async def get_league_details(league: str) -> JsonResult:
+    """获取联赛详情。"""
+    ln = normalize_league(league)
+    if ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_league_details
+    return await fetch_league_details(slug=ln)
+
+
+# ═══════════════════════════════════════════════════
+#  战队
+# ═══════════════════════════════════════════════════
+
+async def get_all_teams(league: str = "") -> JsonResult:
+    """获取所有战队列表，可按联赛过滤。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_all_teams
+    return await fetch_all_teams(league=ln or "")
+
+
+async def get_team(team_id: str) -> JsonResult:
+    """获取单个战队信息。"""
+    from .lolesports import fetch_team
+    return await fetch_team(team_id=team_id)
+
+
+async def get_team_roster(team_id: str) -> JsonResult:
+    """获取战队阵容。"""
+    from .lolesports import fetch_team_roster
+    return await fetch_team_roster(team_id=team_id)
+
+
+async def get_team_matches(team_id: str, limit: int = 10) -> JsonResult:
+    """获取战队近期比赛。"""
+    from .lolesports import fetch_team_matches
+    return await fetch_team_matches(team_id=team_id, limit=limit)
+
+
+async def get_team_stats(team_id: str, season: str = "current") -> JsonResult:
+    """获取战队统计数据。"""
+    from .lolesports import fetch_team_stats
+    return await fetch_team_stats(team_id=team_id, season=season)
+
+
+async def get_team_h2h(team_a: str, team_b: str) -> JsonResult:
+    """获取两队交手记录。"""
+    from .lolesports import fetch_team_h2h
+    return await fetch_team_h2h(team_a=team_a, team_b=team_b)
+
+
+async def get_team_full_profile(team_id: str) -> JsonResult:
+    """获取战队完整画像（信息+阵容+统计+近期比赛）。"""
+    from .lolesports import fetch_team_full_profile
+    return await fetch_team_full_profile(team_id=team_id)
+
+
+# ═══════════════════════════════════════════════════
+#  选手
+# ═══════════════════════════════════════════════════
+
+async def get_all_players(league: str = "") -> JsonResult:
+    """获取所有选手，可按联赛过滤。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_all_players
+    return await fetch_all_players(league=ln or "")
+
+
+async def get_player(player_id: str) -> JsonResult:
+    """获取单个选手信息。"""
+    from .lolesports import fetch_player
+    return await fetch_player(player_id=player_id)
+
+
+async def get_player_stats(player_id: str, season: str = "current") -> JsonResult:
+    """获取选手统计数据。"""
+    from .lolesports import fetch_player_stats
+    return await fetch_player_stats(player_id=player_id, season=season)
+
+
+async def get_player_career(player_id: str) -> JsonResult:
+    """获取选手生涯数据。"""
+    from .lolesports import fetch_player_career
+    return await fetch_player_career(player_id=player_id)
+
+
+async def get_player_champions(player_id: str) -> JsonResult:
+    """获取选手英雄池。"""
+    from .lolesports import fetch_player_champions
+    return await fetch_player_champions(player_id=player_id)
+
+
+async def get_player_matches(player_id: str, limit: int = 10) -> JsonResult:
+    """获取选手近期比赛。"""
+    from .lolesports import fetch_player_matches
+    return await fetch_player_matches(player_id=player_id, limit=limit)
+
+
+async def get_player_full_profile(player_id: str) -> JsonResult:
+    """获取选手完整画像（信息+统计+生涯+英雄池）。"""
+    from .lolesports import fetch_player_full_profile
+    return await fetch_player_full_profile(player_id=player_id)
+
+
+# ═══════════════════════════════════════════════════
+#  锦标赛
+# ═══════════════════════════════════════════════════
+
+async def get_all_tournaments(league: str = "") -> JsonResult:
+    """获取所有锦标赛。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_all_tournaments
+    return await fetch_all_tournaments(league=ln or "")
+
+
+async def get_tournament(tournament_id: str) -> JsonResult:
+    """获取锦标赛详情。"""
+    from .lolesports import fetch_tournament
+    return await fetch_tournament(tournament_id=tournament_id)
+
+
+async def get_tournament_standings(tournament_id: str) -> JsonResult:
+    """获取锦标赛积分榜。"""
+    from .lolesports import fetch_tournament_standings
+    return await fetch_tournament_standings(tournament_id=tournament_id)
+
+
+async def get_tournament_bracket(tournament_id: str) -> JsonResult:
+    """获取锦标赛淘汰赛对阵。"""
+    from .lolesports import fetch_tournament_bracket
+    return await fetch_tournament_bracket(tournament_id=tournament_id)
+
+
+async def get_tournament_mvp(tournament_id: str) -> JsonResult:
+    """获取锦标赛 MVP。"""
+    from .lolesports import fetch_tournament_mvp
+    return await fetch_tournament_mvp(tournament_id=tournament_id)
+
+
+async def get_tournament_full(tournament_id: str) -> JsonResult:
+    """获取锦标赛全貌。"""
+    from .lolesports import fetch_tournament_full
+    return await fetch_tournament_full(tournament_id=tournament_id)
+
+
+# ═══════════════════════════════════════════════════
+#  英雄数据
+# ═══════════════════════════════════════════════════
+
+async def get_champion_stats(league: str = "", season: str = "current") -> JsonResult:
+    """获取英雄统计数据。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_champion_stats
+    return await fetch_champion_stats(league=ln or "", season=season)
+
+
+async def get_champion_presence(league: str = "", season: str = "current") -> JsonResult:
+    """获取英雄 Pick/Ban 率。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_champion_presence
+    return await fetch_champion_presence(league=ln or "", season=season)
+
+
+# ═══════════════════════════════════════════════════
+#  排行榜
+# ═══════════════════════════════════════════════════
+
+async def get_gpr() -> JsonResult:
+    """获取全球战力排名。"""
+    from .lolesports import fetch_global_power_rankings
+    return await fetch_global_power_rankings()
+
+
+async def get_player_rankings(metric: str = "kda", limit: int = 20) -> JsonResult:
+    """获取选手排名。metric: kda|kills|deaths|assists|cs"""
+    from .lolesports import fetch_player_rankings
+    return await fetch_player_rankings(metric=metric, limit=limit)
+
+
+async def get_team_rankings(metric: str = "wins", limit: int = 20) -> JsonResult:
+    """获取战队排名。"""
+    from .lolesports import fetch_team_rankings
+    return await fetch_team_rankings(metric=metric, limit=limit)
+
+
+# ═══════════════════════════════════════════════════
+#  数据排行榜
+# ═══════════════════════════════════════════════════
+
+async def get_leaderboard(metric: str, league: str = "", season: str = "current") -> JsonResult:
+    """获取数据排行榜。metric: kda|kills|deaths|assists|cs|gold|vision|damage"""
+    from .lolesports import (
+        fetch_leaderboards_assists,
+        fetch_leaderboards_cs,
+        fetch_leaderboards_damage,
+        fetch_leaderboards_deaths,
+        fetch_leaderboards_gold,
+        fetch_leaderboards_kda,
+        fetch_leaderboards_kills,
+        fetch_leaderboards_vision,
+    )
+    ln = normalize_league(league) if league else ""
+    if league and not ln:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    m = metric.strip().lower()
+    func_map = {
+        "kda": fetch_leaderboards_kda,
+        "kills": fetch_leaderboards_kills,
+        "deaths": fetch_leaderboards_deaths,
+        "assists": fetch_leaderboards_assists,
+        "cs": fetch_leaderboards_cs,
+        "gold": fetch_leaderboards_gold,
+        "vision": fetch_leaderboards_vision,
+        "damage": fetch_leaderboards_damage,
+    }
+    fn = func_map.get(m)
+    if fn is None:
+        return Failure(error=f"不支持的数据项: {metric}，可用: {', '.join(func_map)}")
+    return await fn(league=ln, season=season)
+
+
+# ═══════════════════════════════════════════════════
+#  搜索
+# ═══════════════════════════════════════════════════
+
+async def search_teams(query: str) -> JsonResult:
+    """搜索战队。"""
+    from .lolesports import search_teams
+    return await search_teams(query=query)
+
+
+async def search_players(query: str) -> JsonResult:
+    """搜索选手。"""
+    from .lolesports import search_players
+    return await search_players(query=query)
+
+
+async def search_tournaments(query: str) -> JsonResult:
+    """搜索锦标赛。"""
+    from .lolesports import search_tournaments
+    return await search_tournaments(query=query)
+
+
+# ═══════════════════════════════════════════════════
+#  热门趋势
+# ═══════════════════════════════════════════════════
+
+async def get_trending() -> JsonResult:
+    """获取热门趋势。"""
+    from .lolesports import fetch_trending
+    return await fetch_trending()
+
+
+async def get_trending_players() -> JsonResult:
+    """获取热门选手。"""
+    from .lolesports import fetch_trending_players
+    return await fetch_trending_players()
+
+
+async def get_trending_teams() -> JsonResult:
+    """获取热门战队。"""
+    from .lolesports import fetch_trending_teams
+    return await fetch_trending_teams()
+
+
+async def get_trending_champions() -> JsonResult:
+    """获取热门英雄。"""
+    from .lolesports import fetch_trending_champions
+    return await fetch_trending_champions()
+
+
+# ═══════════════════════════════════════════════════
+#  历史数据
+# ═══════════════════════════════════════════════════
+
+async def get_worlds_history() -> JsonResult:
+    """获取世界赛历史。"""
+    from .lolesports import fetch_worlds_history
+    return await fetch_worlds_history()
+
+
+async def get_msi_history() -> JsonResult:
+    """获取 MSI 历史。"""
+    from .lolesports import fetch_msi_history
+    return await fetch_msi_history()
+
+
+# ═══════════════════════════════════════════════════
+#  转会 / 记录 / 奖项
+# ═══════════════════════════════════════════════════
+
+async def get_transfers(league: str = "", season: str = "current") -> JsonResult:
+    """获取转会信息。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_transfers
+    return await fetch_transfers(league=ln or "", season=season)
+
+
+async def get_records(league: str = "") -> JsonResult:
+    """获取赛事记录。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_records
+    return await fetch_records(league=ln or "")
+
+
+async def get_milestones(league: str = "") -> JsonResult:
+    """获取里程碑数据。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_milestones
+    return await fetch_milestones(league=ln or "")
+
+
+async def get_awards(league: str = "") -> JsonResult:
+    """获取奖项列表。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_awards
+    return await fetch_awards(league=ln or "")
+
+
+async def get_mvp_awards(league: str = "", season: str = "current") -> JsonResult:
+    """获取 MVP 奖项。"""
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .lolesports import fetch_mvp_awards
+    return await fetch_mvp_awards(league=ln or "", season=season)
+
+
+# ═══════════════════════════════════════════════════
+#  静态数据
+# ═══════════════════════════════════════════════════
+
+async def get_static_champions() -> JsonResult:
+    """获取英雄静态数据。"""
+    from .lolesports import fetch_static_champions
+    return await fetch_static_champions()
+
+
+async def get_static_items() -> JsonResult:
+    """获取装备静态数据。"""
+    from .lolesports import fetch_static_items
+    return await fetch_static_items()
+
+
+async def get_static_patches() -> JsonResult:
+    """获取版本列表。"""
+    from .lolesports import fetch_static_patches
+    return await fetch_static_patches()
+
+
+# ═══════════════════════════════════════════════════
+#  工具
+# ═══════════════════════════════════════════════════
 
 def _pick_match(matches: list[LeagueMatch], round_number: int | str) -> LeagueMatch | None:
     if isinstance(round_number, str) and round_number.lower() == "last":

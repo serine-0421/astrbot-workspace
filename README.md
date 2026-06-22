@@ -1,40 +1,48 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，支持 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区。赛程、比赛结果、BP、实时比分、排名等数据通过 citoapi 获取。集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
+LoL 电竞赛事推送与查询插件 — **128+ API 端点** × **21 个数据类别** × **28+ 查询命令**。
+
+覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，从赛程、排名、实时比分、BP 阵容到选手生涯、战队交手记录、英雄统计、全球战力排行榜、转会动态、锦标赛对阵，一站式查询。
+
+集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 ---
 
-## ✨ 功能
+## ✨ 功能总览
 
-### ✅ 已实现
+### 21 大数据类别
 
-| 功能 | 说明 | 触发方式 |
+| # | 类别 | 说明 | 端点数 |
+|:--|:--|:--|:--|
+| 1 | **Leagues** | 联赛信息查询 | 2 |
+| 2 | **Schedule** | 赛程（完整/今日/本周/即将/已完成） | 5 |
+| 3 | **Live** | 实时比赛（窗口/统计/时间线/事件流） | 5 |
+| 4 | **Matches** | 比赛详情、BP、时间线 | 6 |
+| 5 | **Games** | 对局级数据 | 8 |
+| 6 | **Teams** | 战队信息/阵容/统计/交手/英雄 | 9 |
+| 7 | **Players** | 选手信息/统计/生涯/英雄池 | 7 |
+| 8 | **Tournaments** | 锦标赛/积分榜/对阵/MVP | 9 |
+| 9 | **Standings** | 积分榜/排名 | 3 |
+| 10 | **Champions** | 英雄统计/登场率/对局 | 4 |
+| 11 | **Rankings** | 全球战力GPR/选手排名/战队排名 | 3 |
+| 12 | **Leaderboards** | 8 项指标排行榜 | 8 |
+| 13 | **History** | 世界赛/MSI/赛区历史 | 3 |
+| 14 | **Transfers** | 转会动态 | 2 |
+| 15 | **Search** | 战队/选手/锦标赛/比赛搜索 | 4 |
+| 16 | **Trending** | 热门趋势（综合/选手/战队/英雄） | 4 |
+| 17 | **Static Data** | 英雄/装备/符文/召唤师技能/版本 | 6 |
+| 18 | **Regions** | 区域信息 | 1 |
+| 19 | **Roles** | 位置信息 | 1 |
+| 20 | **Records** | 赛事记录/里程碑 | 2 |
+| 21 | **Awards** | 奖项/MVP/全明星/季后赛 | 4 |
+
+### 消息来源集成
+
+| 来源 | 功能 | 触发 |
 |:--|:--|:--|
-| 📅 赛程查询 | 查看近期比赛安排，按赛区/赛段筛选 | `/lol schedule` |
-| ⏭ 下一场比赛 | 下一场即将开始的完整时间表 | `/lol next` |
-| 📡 实时比赛 | 正在进行的比赛（击杀/经济/塔/龙/男爵） | `/lol live` |
-| 🏆 比赛结果 | 已完成比赛的结果 | `/lol result` |
-| 🧠 BP 阵容 | 每局 Ban/Pick 详情 | `/lol bp` |
-| 📋 比赛详情 | 完整比赛信息 | `/lol detail` |
-| 📊 排名/积分榜 | 常规赛/淘汰赛排名 | `/lol standings` |
-| 📢 自动推送 | 订阅后自动推送通知 | `/lol subscribe` |
 | 🔔 B站 LOL 官号 | 官方视频投稿推送 | 自动（订阅后） |
 | 🔵 B站 BLG 官号 | BP 图文动态推送 | 自动（订阅后） |
-| 📰 微博海报 | LPL 赛前海报推送 | 自动（订阅后） |
-| 🔑 API Key 管理 | 查看/设置 citoapi Key | `/lol apikey` |
-
-### 🔜 规划中 / 框架已就绪
-
-| 功能 | 状态 | 说明 |
-|:--|:--|:--|
-| ⏰ 距比赛日 ≤ 24h | 🚧 调度器已实现 | 当日赛程 + 对阵表 + 战队海报 |
-| 🔍 赛前 30 分钟 | 🚧 调度器已实现 | 首发名单 + 历史交手 + 赛前预测 |
-| 🧠 BP 结束自动推送 | 🚧 调度器已实现 | 自动推送阵容名单 |
-| 📊 每局结束自动推送 | 🚧 调度器已实现 | 胜负 + 文字战报 |
-| 🏆 比赛结束自动推送 | 🚧 调度器已实现 | 最终比分 + MVP/FMVP + B站回放 |
-| 🏅 淘汰赛关键节点 | 🚧 调度器已实现 | 晋级/淘汰 + 后续对阵 |
-
-> 赛事推送框架已在后台调度器中实现。当前第三方平台数据（B站/微博）可正常推送，比赛数据自动推送依赖 citoapi 接入后即可激活。
+| 📰 微博 | LPL 赛前海报推送 | 自动（订阅后） |
 
 ---
 
@@ -45,160 +53,127 @@ cd AstrBot/data/plugins
 git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 ```
 
-依赖：
-- `httpx` - HTTP 请求
-- `aiohttp` - 异步 HTTP
+依赖：`httpx`、`aiohttp`、`pillow`
 
 ---
 
-## 🔑 API Key 配置（必读）
+## 🔑 API Key 配置
 
-LoL Esports 赛事数据（赛程/排名/比赛详情/Ban-Pick/实时比分）通过 **citoapi** 获取。
-
-### 获取 Key
-
-citoapi Key **长期有效，无需刷新**。详见 [citoapi 文档](https://api.citoapi.com/)。
+LoL Esports 赛事数据（赛程/排名/比赛详情/BP/实时比分）通过 **citoapi** 获取。
 
 ### 配置方式（任选一种）
 
 **方式 1：环境变量（推荐）**
-
 ```bash
 # Windows PowerShell
 $env:CITO_API_KEY = "cito_xxxxxxxx"
-
 # Linux / macOS
 export CITO_API_KEY="cito_xxxxxxxx"
 ```
 
-**方式 2：插件配置文件**
+**方式 2：插件配置文件** — 在 AstrBot 插件配置中添加 `"cito_api_key": "cito_xxxxxxxx"`
 
-在 AstrBot 插件配置中添加：
-```json
-{ "cito_api_key": "cito_xxxxxxxx" }
-```
-
-**方式 3：命令行动态设置**
-
-```
-/lol apikey cito_xxxxxxxx
-```
+**方式 3：命令行动态设置** — `/lol apikey cito_xxxxxxxx`
 
 > 💡 插件内置了一个默认 Key，不配置也可直接使用。但建议配置自己的 Key 以获得更稳定的服务。
-
-### 检查 Key 状态
-
-```
-/lol apikey
-```
-
-输出示例：
-```
-🔑 citoapi Key 状态
-
-  Key: cito_dc5****3091
-  来源: 内置 Key
-  citoapi Key 长期有效，无需刷新
-
-💡 设置新 Key: /lol apikey <你的key>
-💡 环境变量: CITO_API_KEY
-```
 
 ---
 
 ## 📖 命令参考
 
-### 赛程查询
+### 🔹 赛程 & 比赛
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol schedule [league]` | 查询赛区完整赛程 | `/lol schedule lpl` |
+| `/lol next [league]` | 下一场比赛 | `/lol next lck` |
+| `/lol live [league]` | 实时比赛（击杀/经济/塔/龙/男爵） | `/lol live` |
+| `/lol result [league]` | 最近比赛结果 | `/lol result lpl` |
+| `/lol bp [league]` | 最近比赛 BP 阵容 | `/lol bp lck` |
+| `/lol detail [league]` | 最近比赛完整详情 | `/lol detail` |
+| `/lol standings [league]` | 积分榜/排名 | `/lol standings lck` |
+| `/lol today` | 今日所有赛程 | `/lol today` |
+| `/lol week` | 本周所有赛程 | `/lol week` |
+
+### 🔹 战队 — `/lol team`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol team search <关键词>` | 搜索战队 | `/lol team search T1` |
+| `/lol team info <id>` | 战队详情 | `/lol team info {team_id}` |
+| `/lol team roster <id>` | 战队阵容 | `/lol team roster {team_id}` |
+| `/lol team matches <id>` | 战队近期比赛 | `/lol team matches {team_id}` |
+| `/lol team stats <id>` | 战队统计数据 | `/lol team stats {team_id}` |
+| `/lol team h2h <a> <b>` | 两队历史交手 | `/lol team h2h T1 GEN` |
+
+### 🔹 选手 — `/lol player`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol player search <关键词>` | 搜索选手 | `/lol player search Faker` |
+| `/lol player info <id>` | 选手详情 | `/lol player info {player_id}` |
+| `/lol player stats <id>` | 选手赛季统计 | `/lol player stats {player_id}` |
+| `/lol player champions <id>` | 选手英雄池 | `/lol player champions {player_id}` |
+
+### 🔹 锦标赛 — `/lol tournament`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol tournament info <id>` | 锦标赛详情 | `/lol tournament info {id}` |
+| `/lol tournament standings <id>` | 锦标赛积分榜 | `/lol tournament standings {id}` |
+| `/lol tournament bracket <id>` | 淘汰赛对阵图 | `/lol tournament bracket {id}` |
+| `/lol tournament mvp <id>` | 锦标赛 MVP | `/lol tournament mvp {id}` |
+
+### 🔹 英雄 — `/lol champion`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol champion stats [league]` | 英雄统计数据 | `/lol champion stats lck` |
+| `/lol champion presence [league]` | 英雄登场率/禁用率 | `/lol champion presence lck` |
+
+### 🔹 排名 — `/lol ranking`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol ranking gpr` | 全球战力排名 (GPR) | `/lol ranking gpr` |
+| `/lol ranking players <指标>` | 选手排名 | `/lol ranking players kda` |
+
+### 🔹 排行榜 — `/lol leaderboard`
 
 ```
-/lol schedule [lck|lpl] [regular|playoff] [season]
+/lol leaderboard <指标> [league]
 ```
+
+支持 8 项指标：`kda` `kills` `deaths` `assists` `cs` `gold` `vision` `damage`
 
 | 示例 | 说明 |
 |:--|:--|
-| `/lol schedule` | LCK 常规赛赛程（默认） |
-| `/lol schedule lck regular` | LCK 常规赛赛程 |
-| `/lol schedule lpl playoff` | LPL 淘汰赛赛程 |
-| `/lol schedule lck regular 2024` | 2024 赛季 LCK 常规赛 |
+| `/lol leaderboard kda lck` | LCK KDA 排行榜 |
+| `/lol leaderboard kills lck` | LCK 击杀榜 |
 
-### 下一场比赛
+### 🔹 其他数据查询
 
-```
-/lol next [lck|lpl] [regular|playoff] [season]
-```
-
-| 示例 | 说明 |
+| 命令 | 说明 |
 |:--|:--|
-| `/lol next` | LCK 下一场比赛 |
-| `/lol next lpl playoff` | LPL 淘汰赛下一场 |
+| `/lol trending` | 热门趋势概览 |
+| `/lol history <worlds\|msi>` | 世界赛 / MSI 历史数据 |
+| `/lol transfers [league]` | 转会动态 |
+| `/lol records` | 赛事记录 |
 
-### 实时比赛（击杀/经济/塔/龙/男爵）
+### 🔹 管理
 
-```
-/lol live [lck|lpl]
-```
-
-| 示例 | 说明 |
+| 命令 | 说明 |
 |:--|:--|
-| `/lol live` | 所有正在进行的比赛 |
-| `/lol live lck` | 仅 LCK |
+| `/lol subscribe` | 订阅自动推送 |
+| `/lol unsubscribe` | 取消订阅 |
+| `/lol apikey` | 查看 Key 状态 |
+| `/lol apikey <key>` | 手动设置 API Key |
+| `/lol test` | 测试连接 |
 
-输出包含：双方击杀数、经济差、防御塔数、小龙数、大龙数、比赛时间。
-
-### 比赛结果
-
-```
-/lol result [lck|lpl] [regular|playoff] [round]
-```
-
-| 示例 | 说明 |
-|:--|:--|
-| `/lol result` | 最近一场比赛结果（默认 LCK） |
-| `/lol result lpl` | LPL 最近一场 |
-| `/lol result lck playoff` | LCK 淘汰赛最近一场 |
-
-### BP 阵容
+### 支持的赛区 (league)
 
 ```
-/lol bp [lck|lpl] [regular|playoff] [round]
-```
-
-### 比赛详情
-
-```
-/lol detail [lck|lpl] [regular|playoff] [round]
-```
-
-### 排名/积分榜
-
-```
-/lol standings [lck|lpl] [regular|playoff] [season]
-```
-
-| 示例 | 说明 |
-|:--|:--|
-| `/lol standings` | LCK 常规赛排名 |
-| `/lol standings lpl playoff` | LPL 淘汰赛排名 |
-
-### 订阅管理
-
-```
-/lol subscribe      订阅当前会话的自动推送
-/lol unsubscribe    取消订阅
-```
-
-### API Key 管理
-
-```
-/lol apikey             查看 Key 状态
-/lol apikey <你的key>   手动设置 Key
-```
-
-### 测试
-
-```
-/lol test          测试当前赛季各项查询
-/lol test 2024     测试 2024 赛季
+lck  lpl  lec  lcs  lco  lcl  ljl  pcs  vcs  cblol  lla  tcl  msi  worlds
 ```
 
 ---
@@ -207,16 +182,16 @@ export CITO_API_KEY="cito_xxxxxxxx"
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |:--|:--|:--|:--|
-| `cito_api_key` | str | `""` | citoapi Key（长期有效，无需刷新） |
-| `enable_image_render` | bool | `false` | 是否启用 HTML 渲染图片 |
-| `enable_match_notifications` | bool | `true` | 是否启用赛事自动推送 |
+| `cito_api_key` | str | `""` | citoapi Key |
+| `enable_image_render` | bool | `false` | HTML 渲染图片 |
+| `enable_match_notifications` | bool | `true` | 赛事自动推送 |
 | `bilibili_uid` | str | `"50329118"` | B站 LOL 官号 UID |
-| `enable_bilibili_video_push` | bool | `true` | 是否推送 B站视频更新 |
+| `enable_bilibili_video_push` | bool | `true` | 推送 B站视频更新 |
 | `bilibili_blg_uid` | str | `"545271146"` | B站 BLG 官号 UID |
-| `enable_bilibili_blg_bp_push` | bool | `true` | 是否推送 BLG BP 动态 |
+| `enable_bilibili_blg_bp_push` | bool | `true` | 推送 BLG BP 动态 |
 | `weibo_uids` | list | `["6537214902"]` | 微博号 UID 列表 |
-| `weibo_cookie` | str | `""` | 微博 Cookie（部分内容需登录） |
-| `enable_weibo_poster_push` | bool | `true` | 是否推送微博海报 |
+| `weibo_cookie` | str | `""` | 微博 Cookie |
+| `enable_weibo_poster_push` | bool | `true` | 推送微博海报 |
 
 ---
 
@@ -224,32 +199,36 @@ export CITO_API_KEY="cito_xxxxxxxx"
 
 ```
 astrbot_plugin_lol_notifier/
-├── main.py                     # AstrBot 插件入口
+├── main.py                     # AstrBot 插件入口（28+ 命令）
 ├── metadata.yaml               # 插件元数据
+├── pyproject.toml              # 项目配置 & 依赖
+├── _conf_schema.json           # 配置 Schema
 ├── README.md                   # 本文件
-├── requirements.txt            # Python 依赖
-├── data/                       # 运行时数据
-│   └── cmd_config.json         # 指令配置
+├── TEST.md                     # 本地测试文档
+├── data/
+│   ├── cmd_config.json         # 指令配置
+│   ├── t2i_templates/          # HTML 渲染模板
+│   └── temp/tool_images/
 └── src/
     └── astrbot_plugin_lol_notifier/
-        ├── __init__.py
-        ├── config.py           # 配置与默认值
-        ├── image_renderer.py   # HTML → 图片渲染
+        ├── __init__.py         # 包导出
+        ├── config.py           # 配置管理
         ├── models.py           # 数据模型（dataclass）
-        ├── scheduler.py        # 后台推送调度器
-        ├── state.py            # 推送去重状态管理
+        ├── image_renderer.py   # HTML → 图片
+        ├── scheduler.py        # 后台推送调度
+        ├── state.py            # 去重状态管理
         ├── utils.py            # 工具函数
         ├── fetcher/            # 数据抓取层
         │   ├── __init__.py
-        │   ├── api.py               # 数据访问封装
-        │   ├── lolesports.py        # citoapi 封装
+        │   ├── api.py               # 数据访问封装（41 个包装函数）
+        │   ├── lolesports.py        # citoapi 网络层（103 个 fetch 函数）
         │   ├── bilibili.py          # B站 API
         │   ├── bilibili_dynamic.py  # B站动态 API
         │   └── weibo.py             # 微博 API
         └── formatter/          # 格式化层
             ├── __init__.py
             ├── card.py         # 卡片格式化
-            └── message.py      # 消息格式化
+            └── message.py      # 消息格式化（36 个 formatter）
 ```
 
 ### 数据流
@@ -257,33 +236,52 @@ astrbot_plugin_lol_notifier/
 ```
 用户命令 (/lol xxx)
     ↓
-main.py → LoLNotifierPlugin
+main.py → LoLNotifierPlugin（命令解析 & 路由）
     ↓
-api.py → 数据访问层（校验/过滤/封装）
+api.py → 数据访问层（league 校验、数据过滤、Result 封装）
     ↓
-lolesports.py → citoapi 请求封装
+lolesports.py → citoapi HTTP 请求（httpx AsyncClient）
     ↓
 citoapi (https://api.citoapi.com/api/v1)
+    ↓
+message.py → 格式化输出（文本/HTML/图片）
+    ↓
+AstrBot 消息通道（QQ / Telegram / WebChat）
 ```
+
+---
+
+## 🧪 测试
+
+详见 [TEST.md](./TEST.md)，包含：
+
+- **全端点连通性测试** — 一个脚本验证 40+ 端点 HTTP 状态
+- **按类别逐类测试** — 每类端点的 curl 示例
+- **Python 脚本测试** — 无需 AstrBot，直接调用 fetcher 层
+- **AstrBot 命令清单** — 全部 28+ 命令的测试 checkbox
+- **错误处理验证** — 无效 Key / 不支持赛区 / 缺参数等场景
 
 ---
 
 ## ❓ FAQ
 
+**Q: 支持哪些赛区？**
+A: 14 个：LCK、LPL、LEC、LCS、LCO、LCL、LJL、PCS、VCS、CBLOL、LLA、TCL、MSI、Worlds。赛区 slug 自动映射到 citoapi 格式。
+
 **Q: 赛程查询返回空或报错？**
-A: 首先检查 API Key 状态：`/lol apikey`。citoapi Key 长期有效，如遇问题可尝试设置新 Key。
+A: `/lol apikey` 检查 Key 状态。citoapi Key 长期有效。
 
 **Q: `/lol live` 返回"没有正在进行的比赛"？**
-A: 仅在比赛进行中时才有实时数据。请确认当前是否有支持的 League 比赛。
+A: 仅在比赛进行中才有实时数据。请确认当前是否有 League 正在比赛。
 
-**Q: 支持哪些赛区？**
-A: 支持 14 个赛区：LCK、LPL、LEC、LCS、LCO、LCL、LJL、PCS、VCS、CBLOL、LLA、TCL、MSI、Worlds。通过 citoapi 的 league slug 映射自动支持。
+**Q: 只想要自动推送？**
+A: 执行 `/lol subscribe`，调度器在后台自动推送，无需主动查询。
 
-**Q: 只想要自动推送，不需要指令查询？**
-A: 可以。只需执行 `/lol subscribe`，调度器会在后台自动推送，无需主动查询。
+**Q: 数据来源可靠吗？**
+A: 赛事数据来自 citoapi (`https://api.citoapi.com/api/v1`)，B站/微博来自平台公开接口。
 
-**Q: 数据来源是否可靠？**
-A: 赛事数据来自 citoapi (`https://api.citoapi.com/api/v1`)，B站/微博数据来自各平台公开接口。
+**Q: 战队/选手 ID 从哪里获取？**
+A: 使用 `/lol team search <关键词>` 或 `/lol player search <关键词>` 获取 ID。
 
 ---
 

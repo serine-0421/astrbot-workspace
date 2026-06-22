@@ -22,6 +22,9 @@ from astrbot.api import logger
 from ..models import (
     BPEntry,
     Failure,
+    JsonListResult,
+    JsonResult,
+    LeaderboardEntry,
     LeagueMatch,
     LiveGameFrame,
     LiveMatch,
@@ -212,7 +215,1095 @@ def _extract_events(data: dict) -> list[dict]:
     return []
 
 
+# ═══════════════════════════════════════════════════
+#  类别 1 — Leagues（联赛信息）
+# ═══════════════════════════════════════════════════
+
+async def fetch_all_leagues() -> JsonResult:
+    """获取所有联赛列表 GET /lol/leagues"""
+    try:
+        data = await _request("/lol/leagues")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_league_details(slug: str) -> JsonResult:
+    """获取联赛详情 GET /lol/leagues/{slug}"""
+    try:
+        data = await _request(f"/lol/leagues/{slug}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 2 — Schedule（赛程）
+# ═══════════════════════════════════════════════════
+
+async def fetch_schedule_by_date(league: str, date: str) -> JsonResult:
+    """按日期获取赛程 GET /lol/leagues/{slug}/schedule?date=2025-01-15"""
+    slug = _resolve_slug(league)
+    try:
+        data = await _request(f"/lol/leagues/{slug}/schedule", {"date": date})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
+    """获取即将到来的比赛 GET /lol/schedule/upcoming"""
+    slug = _resolve_slug(league)
+    try:
+        data = await _request("/lol/schedule/upcoming", {"league": slug, "limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_completed_matches(league: str, limit: int = 10) -> JsonResult:
+    """获取已完成的比赛 GET /lol/schedule/completed"""
+    slug = _resolve_slug(league)
+    try:
+        data = await _request("/lol/schedule/completed", {"league": slug, "limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_today_schedule(league: str = "") -> JsonResult:
+    """获取今日赛程 GET /lol/schedule/today"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/schedule/today", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_week_schedule(league: str = "") -> JsonResult:
+    """获取本周赛程 GET /lol/schedule/week"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/schedule/week", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 3 — Live（实时比赛）
+# ═══════════════════════════════════════════════════
+
+async def fetch_live_window(game_id: str) -> JsonResult:
+    """获取实时比赛窗口数据 GET /lol/live/games/{gameId}/window"""
+    try:
+        data = await _request(f"/lol/live/games/{game_id}/window")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_live_stats(game_id: str) -> JsonResult:
+    """获取实时比赛统计数据 GET /lol/live/games/{gameId}/stats"""
+    try:
+        data = await _request(f"/lol/live/games/{game_id}/stats")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_live_timeline(game_id: str) -> JsonResult:
+    """获取实时比赛时间线 GET /lol/live/games/{gameId}/timeline"""
+    try:
+        data = await _request(f"/lol/live/games/{game_id}/timeline")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_live_events(game_id: str) -> JsonResult:
+    """获取实时比赛事件 GET /lol/live/games/{gameId}/events"""
+    try:
+        data = await _request(f"/lol/live/games/{game_id}/events")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 4 — Matches（比赛详情）
+# ═══════════════════════════════════════════════════
+
+async def fetch_match_info(match_id: str) -> JsonResult:
+    """获取比赛基本信息 GET /lol/matches/{matchId}"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_match_timeline(match_id: str) -> JsonResult:
+    """获取比赛时间线 GET /lol/matches/{matchId}/timeline"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}/timeline")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_match_players(match_id: str) -> JsonResult:
+    """获取比赛选手信息 GET /lol/matches/{matchId}/players"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}/players")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_match_builds(match_id: str) -> JsonResult:
+    """获取比赛出装信息 GET /lol/matches/{matchId}/builds"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}/builds")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_match_stats(match_id: str) -> JsonResult:
+    """获取比赛统计数据 GET /lol/matches/{matchId}/stats"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}/stats")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_match_leaderboards(match_id: str) -> JsonResult:
+    """获取比赛排行榜 GET /lol/matches/{matchId}/leaderboards"""
+    try:
+        data = await _request(f"/lol/matches/{match_id}/leaderboards")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 5 — Games（单局详情）
+# ═══════════════════════════════════════════════════
+
+async def fetch_game_info(game_id: str) -> JsonResult:
+    """获取单局比赛信息 GET /lol/games/{gameId}"""
+    try:
+        data = await _request(f"/lol/games/{game_id}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_timeline(game_id: str) -> JsonResult:
+    """获取单局时间线 GET /lol/games/{gameId}/timeline"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/timeline")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_stats(game_id: str) -> JsonResult:
+    """获取单局统计数据 GET /lol/games/{gameId}/stats"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/stats")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_events(game_id: str) -> JsonResult:
+    """获取单局事件 GET /lol/games/{gameId}/events"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/events")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_builds(game_id: str) -> JsonResult:
+    """获取单局出装 GET /lol/games/{gameId}/builds"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/builds")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_runes(game_id: str) -> JsonResult:
+    """获取单局符文 GET /lol/games/{gameId}/runes"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/runes")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_drafts(game_id: str) -> JsonResult:
+    """获取单局 BP 详情 GET /lol/games/{gameId}/drafts"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/drafts")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_game_leaderboards(game_id: str) -> JsonResult:
+    """获取单局排行榜 GET /lol/games/{gameId}/leaderboards"""
+    try:
+        data = await _request(f"/lol/games/{game_id}/leaderboards")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 6 — Teams（战队）
+# ═══════════════════════════════════════════════════
+
+async def fetch_all_teams(league: str = "") -> JsonResult:
+    """获取所有战队 GET /lol/teams"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/teams", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team(team_id: str) -> JsonResult:
+    """获取战队信息 GET /lol/teams/{teamId}"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_roster(team_id: str) -> JsonResult:
+    """获取战队阵容 GET /lol/teams/{teamId}/roster"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/roster")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_matches(team_id: str, limit: int = 10) -> JsonResult:
+    """获取战队比赛记录 GET /lol/teams/{teamId}/matches"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/matches", {"limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_stats(team_id: str, season: str = "current") -> JsonResult:
+    """获取战队统计数据 GET /lol/teams/{teamId}/stats"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/stats", {"season": season})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_h2h(team_a: str, team_b: str) -> JsonResult:
+    """获取战队交手记录 GET /lol/teams/{teamA}/h2h/{teamB}"""
+    try:
+        data = await _request(f"/lol/teams/{team_a}/h2h/{team_b}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_vs(team_id: str) -> JsonResult:
+    """获取战队对阵统计 GET /lol/teams/{teamId}/vs"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/vs")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_leaderboards(team_id: str) -> JsonResult:
+    """获取战队排行榜数据 GET /lol/teams/{teamId}/leaderboards"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/leaderboards")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_champions(team_id: str) -> JsonResult:
+    """获取战队英雄使用统计 GET /lol/teams/{teamId}/champions"""
+    try:
+        data = await _request(f"/lol/teams/{team_id}/champions")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 7 — Players（选手）
+# ═══════════════════════════════════════════════════
+
+async def fetch_all_players(league: str = "", team: str = "") -> JsonResult:
+    """获取所有选手 GET /lol/players"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    if team:
+        params["team"] = team
+    try:
+        data = await _request("/lol/players", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player(player_id: str) -> JsonResult:
+    """获取选手信息 GET /lol/players/{playerId}"""
+    try:
+        data = await _request(f"/lol/players/{player_id}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_stats(player_id: str, season: str = "current") -> JsonResult:
+    """获取选手统计数据 GET /lol/players/{playerId}/stats"""
+    try:
+        data = await _request(f"/lol/players/{player_id}/stats", {"season": season})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_career(player_id: str) -> JsonResult:
+    """获取选手生涯数据 GET /lol/players/{playerId}/career"""
+    try:
+        data = await _request(f"/lol/players/{player_id}/career")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_champions(player_id: str) -> JsonResult:
+    """获取选手英雄使用统计 GET /lol/players/{playerId}/champions"""
+    try:
+        data = await _request(f"/lol/players/{player_id}/champions")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_matches(player_id: str, limit: int = 10) -> JsonResult:
+    """获取选手比赛记录 GET /lol/players/{playerId}/matches"""
+    try:
+        data = await _request(f"/lol/players/{player_id}/matches", {"limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_leaderboards(player_id: str) -> JsonResult:
+    """获取选手排行榜 GET /lol/players/{playerId}/leaderboards"""
+    try:
+        data = await _request(f"/lol/players/{player_id}/leaderboards")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 8 — Tournaments（锦标赛/赛事）
+# ═══════════════════════════════════════════════════
+
+async def fetch_all_tournaments(league: str = "") -> JsonResult:
+    """获取所有锦标赛 GET /lol/tournaments"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/tournaments", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament(tournament_id: str) -> JsonResult:
+    """获取锦标赛信息 GET /lol/tournaments/{tournamentId}"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_standings(tournament_id: str) -> JsonResult:
+    """获取锦标赛积分榜 GET /lol/tournaments/{tournamentId}/standings"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/standings")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_bracket(tournament_id: str) -> JsonResult:
+    """获取锦标赛淘汰赛对阵 GET /lol/tournaments/{tournamentId}/bracket"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/bracket")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_matches(tournament_id: str, limit: int = 20) -> JsonResult:
+    """获取锦标赛比赛列表 GET /lol/tournaments/{tournamentId}/matches"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/matches", {"limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_mvp(tournament_id: str) -> JsonResult:
+    """获取锦标赛 MVP GET /lol/tournaments/{tournamentId}/mvp"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/mvp")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_teams(tournament_id: str) -> JsonResult:
+    """获取锦标赛参赛队伍 GET /lol/tournaments/{tournamentId}/teams"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/teams")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_stats(tournament_id: str) -> JsonResult:
+    """获取锦标赛统计数据 GET /lol/tournaments/{tournamentId}/stats"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/stats")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_leaderboards(tournament_id: str) -> JsonResult:
+    """获取锦标赛排行榜 GET /lol/tournaments/{tournamentId}/leaderboards"""
+    try:
+        data = await _request(f"/lol/tournaments/{tournament_id}/leaderboards")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 9 — Standings（积分榜/排名）
+# ═══════════════════════════════════════════════════
+
+async def fetch_league_group_standings(league: str, group: str = "") -> JsonResult:
+    """获取联赛分组积分榜 GET /lol/leagues/{slug}/standings?group=A"""
+    slug = _resolve_slug(league)
+    params = {}
+    if group:
+        params["group"] = group
+    try:
+        data = await _request(f"/lol/leagues/{slug}/standings", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_detailed_standings(league: str, season: str = "current") -> JsonResult:
+    """获取详细积分榜 GET /lol/standings?league=xxx&season=xxx"""
+    slug = _resolve_slug(league)
+    try:
+        data = await _request("/lol/standings", {"league": slug, "season": season})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 10 — Champions（英雄数据）
+# ═══════════════════════════════════════════════════
+
+async def fetch_champion_stats(league: str = "", season: str = "current") -> JsonResult:
+    """获取英雄统计 GET /lol/champions/stats"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/champions/stats", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_champion_presence(league: str = "", season: str = "current") -> JsonResult:
+    """获取英雄 Pick/Ban 率 GET /lol/champions/presence"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/champions/presence", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_champion_matchups(champion: str, league: str = "") -> JsonResult:
+    """获取英雄对阵数据 GET /lol/champions/{name}/matchups"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request(f"/lol/champions/{champion}/matchups", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_champion_details(champion: str) -> JsonResult:
+    """获取英雄详细信息 GET /lol/champions/{name}"""
+    try:
+        data = await _request(f"/lol/champions/{champion}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 11 — Rankings（排行榜）
+# ═══════════════════════════════════════════════════
+
+async def fetch_global_power_rankings() -> JsonResult:
+    """获取全球战力排名 GET /lol/rankings/gpr"""
+    try:
+        data = await _request("/lol/rankings/gpr")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_rankings(metric: str = "kda", limit: int = 20) -> JsonResult:
+    """获取选手排名 GET /lol/rankings/players?metric=kda|kills|deaths|assists|cs"""
+    try:
+        data = await _request("/lol/rankings/players", {"metric": metric, "limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_team_rankings(metric: str = "wins", limit: int = 20) -> JsonResult:
+    """获取战队排名 GET /lol/rankings/teams?metric=wins|losses|winrate"""
+    try:
+        data = await _request("/lol/rankings/teams", {"metric": metric, "limit": str(limit)})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 12 — History（历史数据）
+# ═══════════════════════════════════════════════════
+
+async def fetch_worlds_history() -> JsonResult:
+    """获取世界赛历史 GET /lol/history/worlds"""
+    try:
+        data = await _request("/lol/history/worlds")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_msi_history() -> JsonResult:
+    """获取 MSI 历史 GET /lol/history/msi"""
+    try:
+        data = await _request("/lol/history/msi")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_regional_history(league: str) -> JsonResult:
+    """获取赛区历史 GET /lol/history/regional/{slug}"""
+    slug = _resolve_slug(league)
+    try:
+        data = await _request(f"/lol/history/regional/{slug}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 13 — Transfers（转会）
+# ═══════════════════════════════════════════════════
+
+async def fetch_transfers(league: str = "", season: str = "current") -> JsonResult:
+    """获取转会信息 GET /lol/transfers"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/transfers", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_free_agents() -> JsonResult:
+    """获取自由选手 GET /lol/transfers/free-agents"""
+    try:
+        data = await _request("/lol/transfers/free-agents")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 14 — Leaderboards（数据排行）
+# ═══════════════════════════════════════════════════
+
+async def fetch_leaderboards_kda(league: str = "", season: str = "current") -> JsonResult:
+    """KDA 排行榜 GET /lol/leaderboards/kda"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/kda", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_kills(league: str = "", season: str = "current") -> JsonResult:
+    """击杀榜 GET /lol/leaderboards/kills"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/kills", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_deaths(league: str = "", season: str = "current") -> JsonResult:
+    """死亡榜 GET /lol/leaderboards/deaths"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/deaths", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_assists(league: str = "", season: str = "current") -> JsonResult:
+    """助攻榜 GET /lol/leaderboards/assists"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/assists", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_cs(league: str = "", season: str = "current") -> JsonResult:
+    """补刀榜 GET /lol/leaderboards/cs"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/cs", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_gold(league: str = "", season: str = "current") -> JsonResult:
+    """经济榜 GET /lol/leaderboards/gold"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/gold", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_vision(league: str = "", season: str = "current") -> JsonResult:
+    """视野榜 GET /lol/leaderboards/vision"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/vision", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_leaderboards_damage(league: str = "", season: str = "current") -> JsonResult:
+    """伤害榜 GET /lol/leaderboards/damage"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/leaderboards/damage", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 15 — Search（搜索）
+# ═══════════════════════════════════════════════════
+
+async def search_teams(query: str) -> JsonResult:
+    """搜索战队 GET /lol/search/teams?q=xxx"""
+    try:
+        data = await _request("/lol/search/teams", {"q": query})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def search_players(query: str) -> JsonResult:
+    """搜索选手 GET /lol/search/players?q=xxx"""
+    try:
+        data = await _request("/lol/search/players", {"q": query})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def search_tournaments(query: str) -> JsonResult:
+    """搜索锦标赛 GET /lol/search/tournaments?q=xxx"""
+    try:
+        data = await _request("/lol/search/tournaments", {"q": query})
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def search_matches(league: str = "", query: str = "") -> JsonResult:
+    """搜索比赛 GET /lol/search/matches"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    if query:
+        params["q"] = query
+    try:
+        data = await _request("/lol/search/matches", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 16 — Trending（热门趋势）
+# ═══════════════════════════════════════════════════
+
+async def fetch_trending() -> JsonResult:
+    """获取热门趋势 GET /lol/trending"""
+    try:
+        data = await _request("/lol/trending")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_trending_players() -> JsonResult:
+    """获取热门选手 GET /lol/trending/players"""
+    try:
+        data = await _request("/lol/trending/players")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_trending_teams() -> JsonResult:
+    """获取热门战队 GET /lol/trending/teams"""
+    try:
+        data = await _request("/lol/trending/teams")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_trending_champions() -> JsonResult:
+    """获取热门英雄 GET /lol/trending/champions"""
+    try:
+        data = await _request("/lol/trending/champions")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 17 — Static Data（静态数据）
+# ═══════════════════════════════════════════════════
+
+async def fetch_static_champions() -> JsonResult:
+    """获取所有英雄数据 GET /lol/static/champions"""
+    try:
+        data = await _request("/lol/static/champions")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_static_items() -> JsonResult:
+    """获取所有装备数据 GET /lol/static/items"""
+    try:
+        data = await _request("/lol/static/items")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_static_runes() -> JsonResult:
+    """获取所有符文数据 GET /lol/static/runes"""
+    try:
+        data = await _request("/lol/static/runes")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_static_summoner_spells() -> JsonResult:
+    """获取召唤师技能 GET /lol/static/summonerspells"""
+    try:
+        data = await _request("/lol/static/summonerspells")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_static_patches() -> JsonResult:
+    """获取版本列表 GET /lol/static/patches"""
+    try:
+        data = await _request("/lol/static/patches")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_static_patch_notes(patch: str) -> JsonResult:
+    """获取版本更新说明 GET /lol/static/patches/{version}"""
+    try:
+        data = await _request(f"/lol/static/patches/{patch}")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 18 — Regions（赛区）
+# ═══════════════════════════════════════════════════
+
+async def fetch_regions() -> JsonResult:
+    """获取所有赛区 GET /lol/regions"""
+    try:
+        data = await _request("/lol/regions")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 19 — Roles（位置）
+# ═══════════════════════════════════════════════════
+
+async def fetch_roles() -> JsonResult:
+    """获取所有位置列表 GET /lol/roles"""
+    try:
+        data = await _request("/lol/roles")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 20 — Records（记录/里程碑）
+# ═══════════════════════════════════════════════════
+
+async def fetch_records(league: str = "") -> JsonResult:
+    """获取赛事记录 GET /lol/records"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/records", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_milestones(league: str = "") -> JsonResult:
+    """获取里程碑 GET /lol/records/milestones"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/records/milestones", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  类别 21 — Awards（奖项）
+# ═══════════════════════════════════════════════════
+
+async def fetch_awards(league: str = "") -> JsonResult:
+    """获取奖项列表 GET /lol/awards"""
+    params = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/awards", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_mvp_awards(league: str = "", season: str = "current") -> JsonResult:
+    """获取 MVP 奖项 GET /lol/awards/mvp"""
+    params = {"season": season}
+    if league:
+        params["league"] = _resolve_slug(league)
+    try:
+        data = await _request("/lol/awards/mvp", params)
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_allstar_info() -> JsonResult:
+    """获取全明星赛信息 GET /lol/allstar"""
+    try:
+        data = await _request("/lol/allstar")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_playoffs_info() -> JsonResult:
+    """获取季后赛信息 GET /lol/playoffs"""
+    try:
+        data = await _request("/lol/playoffs")
+        return Success(value=data)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  聚合查询（跨端点组合）
+# ═══════════════════════════════════════════════════
+
+async def fetch_team_full_profile(team_id: str) -> JsonResult:
+    """聚合获取战队完整画像（信息+阵容+统计+近期比赛）"""
+    try:
+        results = {}
+        endpoints = {
+            "info": f"/lol/teams/{team_id}",
+            "roster": f"/lol/teams/{team_id}/roster",
+            "stats": f"/lol/teams/{team_id}/stats",
+            "matches": f"/lol/teams/{team_id}/matches",
+        }
+        for key, path in endpoints.items():
+            try:
+                results[key] = await _request(path)
+            except Exception:
+                results[key] = None
+        return Success(value=results)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_player_full_profile(player_id: str) -> JsonResult:
+    """聚合获取选手完整画像（信息+统计+生涯+英雄池）"""
+    try:
+        results = {}
+        endpoints = {
+            "info": f"/lol/players/{player_id}",
+            "stats": f"/lol/players/{player_id}/stats",
+            "career": f"/lol/players/{player_id}/career",
+            "champions": f"/lol/players/{player_id}/champions",
+        }
+        for key, path in endpoints.items():
+            try:
+                results[key] = await _request(path)
+            except Exception:
+                results[key] = None
+        return Success(value=results)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+async def fetch_tournament_full(tournament_id: str) -> JsonResult:
+    """聚合获取锦标赛全貌（信息+积分榜+对阵+MVP+排行榜）"""
+    try:
+        results = {}
+        endpoints = {
+            "info": f"/lol/tournaments/{tournament_id}",
+            "standings": f"/lol/tournaments/{tournament_id}/standings",
+            "bracket": f"/lol/tournaments/{tournament_id}/bracket",
+            "mvp": f"/lol/tournaments/{tournament_id}/mvp",
+            "leaderboards": f"/lol/tournaments/{tournament_id}/leaderboards",
+        }
+        for key, path in endpoints.items():
+            try:
+                results[key] = await _request(path)
+            except Exception:
+                results[key] = None
+        return Success(value=results)
+    except Exception as e:
+        return Failure(error=str(e))
+
+
+# ═══════════════════════════════════════════════════
+#  辅助函数
+# ═══════════════════════════════════════════════════
+
+def _resolve_slug(user_league: str) -> str:
+    """将用户侧 league 转换为 citoapi 的 slug，未知则原样返回。"""
+    from ..utils import normalize_league
+    normalized = normalize_league(user_league)
+    if not normalized:
+        return user_league
+    return _LEAGUE_SLUGS.get(normalized, user_league)
+
+
 def _parse_match_event(ev: dict, league_slug: str) -> LeagueMatch | None:
+    """解析赛程事件为 LeagueMatch。"""
     # 过滤非 match 类型事件
     ev_type = ev.get("type", ev.get("eventType", ev.get("state", "")))
     if ev_type and ev_type not in ("match", "in_progress", "completed", "unstarted", ""):

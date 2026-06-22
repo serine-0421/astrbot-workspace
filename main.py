@@ -11,9 +11,34 @@ Commands (prefix /lol):
     /lol bp [league] [regular|playoff] [round]
     /lol detail [league] [regular|playoff] [round]
     /lol standings [league] [regular|playoff] [season]
+    /lol today [league]
+    /lol week [league]
+    /lol team search <query>
+    /lol team info <team_id>
+    /lol team roster <team_id>
+    /lol team matches <team_id>
+    /lol team stats <team_id>
+    /lol team h2h <team_a> <team_b>
+    /lol player search <query>
+    /lol player info <player_id>
+    /lol player stats <player_id>
+    /lol player champions <player_id>
+    /lol tournament info <tournament_id>
+    /lol tournament standings <tournament_id>
+    /lol tournament bracket <tournament_id>
+    /lol tournament mvp <tournament_id>
+    /lol champion stats [league]
+    /lol champion presence [league]
+    /lol ranking gpr
+    /lol ranking players <kda|kills|deaths|assists|cs>
+    /lol leaderboard <kda|kills|deaths|assists|cs|gold|vision|damage> [league]
+    /lol trending
+    /lol history worlds|msi
+    /lol transfers [league]
+    /lol records [league]
     /lol subscribe
     /lol unsubscribe
-    /lol apikey [key]        查看/设置 citoapi Key 状态
+    /lol apikey [key]
     /lol test [season]
 
 League: lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
@@ -32,48 +57,67 @@ from .src.astrbot_plugin_lol_notifier.fetcher import api
 from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import get_api_key, set_api_key
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
-from .src.astrbot_plugin_lol_notifier.models import Failure, Success
+from .src.astrbot_plugin_lol_notifier.models import Failure, LeagueMatch, Success
 from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 
 HELP_TEXT = """🎮 LoL Notifier 指令列表
 
-查询命令：
+━━━ 比赛查询 ━━━
   /lol schedule [league] [regular|playoff] [season]
-      近期赛程（默认最近 5 场，按赛区与赛段筛选）
+      近期赛程（默认最近 5 场）
   /lol next [league] [regular|playoff] [season]
       下一场完整时间表
   /lol live [league]
-      正在进行的实时比赛（击杀/经济/塔/龙/男爵）
+      正在进行的实时比赛
   /lol result [league] [regular|playoff] [round]
       比赛结果（默认最近一场）
   /lol bp [league] [regular|playoff] [round]
       单局 BP（默认最近一场）
   /lol detail [league] [regular|playoff] [round]
-      比赛详细信息（默认最近一场）
+      比赛详细信息
   /lol standings [league] [regular|playoff] [season]
       排名 / 积分榜
+  /lol today [league]
+      今日赛程
+  /lol week [league]
+      本周赛程
 
-  可用赛区: lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
+━━━ 战队 ━━━
+  /lol team search <query>        搜索战队
+  /lol team info <team_id>        战队信息
+  /lol team roster <team_id>      战队阵容
+  /lol team matches <team_id>     战队近期比赛
+  /lol team stats <team_id>       战队统计数据
+  /lol team h2h <team_a> <team_b> 两队交手记录
 
-管理命令：
-  /lol subscribe     订阅当前会话的自动推送
-  /lol unsubscribe   取消当前会话的自动推送
-  /lol apikey [key|refresh]  查看/设置 Key、强制刷新
-  /lol test [season]        测试插件各项查询功能
+━━━ 选手 ━━━
+  /lol player search <query>           搜索选手
+  /lol player info <player_id>         选手信息
+  /lol player stats <player_id>        选手统计数据
+  /lol player champions <player_id>    选手英雄池
 
-已实现的自动推送（订阅后自动触发）：
-  📺 B站 LOL官号 (50329118)    → 最新视频投稿
-  🔵 B站 BLG官号 (545271146)   → BP 图文动态
-  📢 微博各队官号              → LPL 赛前海报（LPL+预告关键词）
+━━━ 锦标赛 ━━━
+  /lol tournament info <id>            锦标赛信息
+  /lol tournament standings <id>       锦标赛积分榜
+  /lol tournament bracket <id>         淘汰赛对阵
+  /lol tournament mvp <id>             锦标赛 MVP
 
-赛事推送框架（待接入数据源）：
-  ⏰ 距比赛日 ≤ 24小时  →  当日赛程 + 对阵表 + 双方战队海报
-  🔍 比赛前 30 分钟     →  首发名单 + 历史交手 + 赛前预测
-  🧠 每小局 BP 结束后   →  格式化阵容名单
-  📊 每小局结束后       →  简要胜负 + 比赛战报
-  🏆 比赛结束后         →  最终比分 + MVP/FMVP + B站回放
-  🏅 淘汰赛关键节点     →  晋级/淘汰情况 + 后续对阵
-"""
+━━━ 英雄 / 数据 ━━━
+  /lol champion stats [league]         英雄统计
+  /lol champion presence [league]      英雄 Pick/Ban 率
+  /lol ranking gpr                     全球战力排名
+  /lol ranking players <metric>        选手排名
+  /lol leaderboard <metric> [league]   数据排行榜
+  /lol trending                        热门趋势
+  /lol history worlds|msi              历史赛事
+  /lol transfers [league]              转会信息
+  /lol records [league]                赛事记录
+
+━━━ 赛区 ━━━
+  lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
+
+━━━ 管理 ━━━
+  /lol subscribe / unsubscribe / apikey / test"""
 
 
 @register(
@@ -415,3 +459,390 @@ class LoLNotifierPlugin(Star):
             lines.append(f"  {'✅' if ok else '❌'} {name}: {detail}")
         lines.append(f"\n共 {passed}/{len(results)} 项通过")
         yield event.plain_result("\n".join(lines))
+
+    # ═══════════════════════════════════════════════
+    #  赛程扩展
+    # ═══════════════════════════════════════════════
+
+    @lol.command("today")
+    async def lol_today(self, event: AstrMessageEvent, league: str = ""):
+        """今日赛程。"""
+        result = await api.get_today_schedule(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_schedule(_parse_schedule_raw(data)))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("week")
+    async def lol_week(self, event: AstrMessageEvent, league: str = ""):
+        """本周赛程。"""
+        result = await api.get_week_schedule(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_schedule(_parse_schedule_raw(data)))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    # ═══════════════════════════════════════════════
+    #  战队子命令组
+    # ═══════════════════════════════════════════════
+
+    @lol.command_group("team")
+    def lol_team(self) -> None:
+        """战队查询"""
+
+    @lol_team.command("search")
+    async def lol_team_search(self, event: AstrMessageEvent, query: str = ""):
+        """搜索战队。"""
+        if not query.strip():
+            yield event.plain_result("请提供搜索关键词。如: /lol team search T1")
+            return
+        result = await api.search_teams(query)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_search_teams(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_team.command("info")
+    async def lol_team_info(self, event: AstrMessageEvent, team_id: str = ""):
+        """战队信息。"""
+        if not team_id.strip():
+            yield event.plain_result("请提供战队 ID。如: /lol team info T1")
+            return
+        result = await api.get_team(team_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_team_info(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_team.command("roster")
+    async def lol_team_roster(self, event: AstrMessageEvent, team_id: str = ""):
+        """战队阵容。"""
+        if not team_id.strip():
+            yield event.plain_result("请提供战队 ID。如: /lol team roster T1")
+            return
+        result = await api.get_team_roster(team_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_team_roster(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_team.command("matches")
+    async def lol_team_matches(self, event: AstrMessageEvent, team_id: str = ""):
+        """战队近期比赛。"""
+        if not team_id.strip():
+            yield event.plain_result("请提供战队 ID。如: /lol team matches T1")
+            return
+        result = await api.get_team_matches(team_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_team_matches(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_team.command("stats")
+    async def lol_team_stats(self, event: AstrMessageEvent, team_id: str = ""):
+        """战队统计数据。"""
+        if not team_id.strip():
+            yield event.plain_result("请提供战队 ID。如: /lol team stats T1")
+            return
+        result = await api.get_team_stats(team_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_stats(data))  # 通用统计格式
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_team.command("h2h")
+    async def lol_team_h2h(self, event: AstrMessageEvent, team_a: str = "", team_b: str = ""):
+        """两队交手记录。"""
+        if not team_a.strip() or not team_b.strip():
+            yield event.plain_result("请提供两个战队 ID。如: /lol team h2h T1 GEN")
+            return
+        result = await api.get_team_h2h(team_a, team_b)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_team_matches(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    # ═══════════════════════════════════════════════
+    #  选手子命令组
+    # ═══════════════════════════════════════════════
+
+    @lol.command_group("player")
+    def lol_player(self) -> None:
+        """选手查询"""
+
+    @lol_player.command("search")
+    async def lol_player_search(self, event: AstrMessageEvent, query: str = ""):
+        """搜索选手。"""
+        if not query.strip():
+            yield event.plain_result("请提供搜索关键词。如: /lol player search Faker")
+            return
+        result = await api.search_players(query)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_search_players(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_player.command("info")
+    async def lol_player_info(self, event: AstrMessageEvent, player_id: str = ""):
+        """选手信息。"""
+        if not player_id.strip():
+            yield event.plain_result("请提供选手 ID。如: /lol player info Faker")
+            return
+        result = await api.get_player(player_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_info(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_player.command("stats")
+    async def lol_player_stats(self, event: AstrMessageEvent, player_id: str = ""):
+        """选手统计数据。"""
+        if not player_id.strip():
+            yield event.plain_result("请提供选手 ID。如: /lol player stats Faker")
+            return
+        result = await api.get_player_stats(player_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_stats(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_player.command("champions")
+    async def lol_player_champions(self, event: AstrMessageEvent, player_id: str = ""):
+        """选手英雄池。"""
+        if not player_id.strip():
+            yield event.plain_result("请提供选手 ID。如: /lol player champions Faker")
+            return
+        result = await api.get_player_champions(player_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_champions(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    # ═══════════════════════════════════════════════
+    #  锦标赛子命令组
+    # ═══════════════════════════════════════════════
+
+    @lol.command_group("tournament")
+    def lol_tournament(self) -> None:
+        """锦标赛查询"""
+
+    @lol_tournament.command("info")
+    async def lol_tournament_info(self, event: AstrMessageEvent, tournament_id: str = ""):
+        """锦标赛信息。"""
+        if not tournament_id.strip():
+            yield event.plain_result("请提供锦标赛 ID。如: /lol tournament info worlds2024")
+            return
+        result = await api.get_tournament(tournament_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_tournament_info(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_tournament.command("standings")
+    async def lol_tournament_standings(self, event: AstrMessageEvent, tournament_id: str = ""):
+        """锦标赛积分榜。"""
+        if not tournament_id.strip():
+            yield event.plain_result("请提供锦标赛 ID。")
+            return
+        result = await api.get_tournament_standings(tournament_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_tournament_standings(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_tournament.command("bracket")
+    async def lol_tournament_bracket(self, event: AstrMessageEvent, tournament_id: str = ""):
+        """淘汰赛对阵。"""
+        if not tournament_id.strip():
+            yield event.plain_result("请提供锦标赛 ID。")
+            return
+        result = await api.get_tournament_bracket(tournament_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_tournament_bracket(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_tournament.command("mvp")
+    async def lol_tournament_mvp(self, event: AstrMessageEvent, tournament_id: str = ""):
+        """锦标赛 MVP。"""
+        if not tournament_id.strip():
+            yield event.plain_result("请提供锦标赛 ID。")
+            return
+        result = await api.get_tournament_mvp(tournament_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_tournament_mvp(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    # ═══════════════════════════════════════════════
+    #  英雄 / 排名 / 排行榜 / 趋势 / 历史
+    # ═══════════════════════════════════════════════
+
+    @lol.command_group("champion")
+    def lol_champion(self) -> None:
+        """英雄数据"""
+
+    @lol_champion.command("stats")
+    async def lol_champion_stats(self, event: AstrMessageEvent, league: str = ""):
+        """英雄统计数据。"""
+        result = await api.get_champion_stats(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_champion_stats(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_champion.command("presence")
+    async def lol_champion_presence(self, event: AstrMessageEvent, league: str = ""):
+        """英雄 Pick/Ban 率。"""
+        result = await api.get_champion_presence(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_champion_presence(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command_group("ranking")
+    def lol_ranking(self) -> None:
+        """排行榜查询"""
+
+    @lol_ranking.command("gpr")
+    async def lol_ranking_gpr(self, event: AstrMessageEvent):
+        """全球战力排名。"""
+        result = await api.get_gpr()
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_gpr_rankings(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol_ranking.command("players")
+    async def lol_ranking_players(self, event: AstrMessageEvent, metric: str = "kda"):
+        """选手排名。metric: kda|kills|deaths|assists|cs"""
+        valid = {"kda", "kills", "deaths", "assists", "cs"}
+        if metric.strip().lower() not in valid:
+            yield event.plain_result(f"不支持的指标: {metric}，可用: {', '.join(valid)}")
+            return
+        result = await api.get_player_rankings(metric)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_rankings(data, metric))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("leaderboard")
+    async def lol_leaderboard(
+        self,
+        event: AstrMessageEvent,
+        metric: str = "kda",
+        league: str = "",
+    ):
+        """数据排行榜。metric: kda|kills|deaths|assists|cs|gold|vision|damage"""
+        valid = {"kda", "kills", "deaths", "assists", "cs", "gold", "vision", "damage"}
+        m = metric.strip().lower()
+        if m not in valid:
+            yield event.plain_result(f"不支持的指标: {metric}，可用: {', '.join(valid)}")
+            return
+        result = await api.get_leaderboard(m, league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_leaderboard(data, m))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("trending")
+    async def lol_trending(self, event: AstrMessageEvent):
+        """热门趋势。"""
+        result = await api.get_trending()
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_trending(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("history")
+    async def lol_history(self, event: AstrMessageEvent, category: str = "worlds"):
+        """历史赛事。worlds | msi"""
+        c = category.strip().lower()
+        if c == "worlds":
+            result = await api.get_worlds_history()
+        elif c == "msi":
+            result = await api.get_msi_history()
+        else:
+            yield event.plain_result("请指定: worlds 或 msi。如: /lol history worlds")
+            return
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_history(data, "世界赛" if c == "worlds" else "MSI"))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("transfers")
+    async def lol_transfers(self, event: AstrMessageEvent, league: str = ""):
+        """转会信息。"""
+        result = await api.get_transfers(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_transfers(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("records")
+    async def lol_records(self, event: AstrMessageEvent, league: str = ""):
+        """赛事记录。"""
+        result = await api.get_records(league)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_records(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+
+# ═══════════════════════════════════════════════════
+#  辅助函数
+# ═══════════════════════════════════════════════════
+
+def _parse_schedule_raw(data: dict) -> list:
+    """从原始 JSON 中提取比赛列表为 LeagueMatch 列表。"""
+    if not isinstance(data, dict):
+        return []
+    events = data.get("events", data.get("matches", data.get("schedule", {}).get("events", [])))
+    if not events:
+        return []
+    from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import _LEAGUE_SLUGS
+
+    results = []
+    for ev in events:
+        m = ev.get("match", ev)
+        teams_raw = m.get("teams", ev.get("teams", []))
+        teams = [t.get("name", t.get("code", "?")) for t in teams_raw] if isinstance(teams_raw, list) else []
+        strategy = m.get("strategy", ev.get("strategy", {}))
+        bo = strategy.get("count", 0) if strategy else 0
+        start_time = ev.get("startTime", m.get("startTime", ev.get("start_time", "")))
+        results.append(LeagueMatch(
+            league=ev.get("league", ""),
+            stage=strategy.get("type", "regular") if strategy else "regular",
+            round=str(m.get("id", ev.get("id", ""))),
+            match_name=" vs ".join(teams) if teams else ev.get("name", ""),
+            bo_type=f"BO{bo}" if bo else "",
+            start_date=start_time[:10] if start_time else "",
+            start_time=start_time[11:16] if len(start_time) > 10 else start_time or "",
+            teams=teams,
+        ))
+    return results
