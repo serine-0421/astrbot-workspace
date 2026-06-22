@@ -1,8 +1,8 @@
 """LoL esports 数据访问层（封装 lolesports.py 抓取结果）。
 
 所有函数均返回 ApiResult 类型（Success | Failure），供上层命令处理器消费。
-数据来源：LoL Esports 公开 API（无需 API Key）。
-当前支持 LCK / LPL 的赛程、结果、BP、排名。
+数据来源：citoapi (https://api.citoapi.com/api/v1)。
+支持 14 个赛区：LCK, LPL, LEC, LCS, LCO, LCL, LJL, PCS, VCS, CBLOL, LLA, TCL, MSI, Worlds。
 """
 
 from __future__ import annotations
@@ -19,8 +19,16 @@ from ..models import (
     Success,
 )
 from ..utils import normalize_league, normalize_stage
+from .lolesports import supported_leagues
 
-SUPPORTED_LEAGUES = {"lck", "lpl"}
+_LEAGUE_HINT = " / ".join(supported_leagues()).upper()
+
+SUPPORTED_LEAGUES = {
+    "lck", "lpl", "lec", "lcs",
+    "lco", "lcl", "ljl", "pcs", "vcs",
+    "cblol", "lla", "tcl",
+    "msi", "worlds",
+}
 SUPPORTED_STAGES = {"regular", "playoff"}
 
 
@@ -38,7 +46,7 @@ async def get_schedule(
 ) -> ScheduleResult:
     league_n = normalize_league(league)
     if league_n is None:
-        return Failure(error="仅支持 LCK / LPL 赛区查询。")
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
     from .lolesports import fetch_schedule
 
@@ -61,7 +69,7 @@ async def get_match_result(
 ) -> ResultResult:
     league_n = normalize_league(league)
     if league_n is None:
-        return Failure(error="仅支持 LCK / LPL 赛区查询。")
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
     from .lolesports import fetch_schedule
 
@@ -97,7 +105,7 @@ async def get_match_bp(
 ) -> BpResult:
     league_n = normalize_league(league)
     if league_n is None:
-        return Failure(error="仅支持 LCK / LPL 赛区查询。")
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
     from .lolesports import fetch_match_detail, fetch_schedule
 
@@ -142,7 +150,7 @@ async def get_match_detail(
 ) -> DetailResult:
     league_n = normalize_league(league)
     if league_n is None:
-        return Failure(error="仅支持 LCK / LPL 赛区查询。")
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
     from .lolesports import fetch_match_detail, fetch_schedule
 
@@ -170,7 +178,7 @@ async def get_standings(
 ) -> StandingsResult:
     league_n = normalize_league(league)
     if league_n is None:
-        return Failure(error="仅支持 LCK / LPL 赛区查询。")
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
     from .lolesports import fetch_standings
 

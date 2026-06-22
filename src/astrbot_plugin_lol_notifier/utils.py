@@ -7,7 +7,13 @@ from typing import Any
 
 def normalize_league(value: str) -> str | None:
     lowered = (value or "").strip().lower()
-    return lowered if lowered in {"lck", "lpl"} else None
+    supported = {
+        "lck", "lpl", "lec", "lcs",
+        "lco", "lcl", "ljl", "pcs", "vcs",
+        "cblol", "lla", "tcl",
+        "msi", "worlds",
+    }
+    return lowered if lowered in supported else None
 
 
 def normalize_stage(value: str) -> str | None:

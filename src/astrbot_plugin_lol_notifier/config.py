@@ -8,12 +8,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "follow_teams": [],
     "enable_image_render": False,
     "enable_match_notifications": True,
-    # ── Riot 开发者 API（赛程/排名/比赛详情） ──
-    # API Key 优先级: 环境变量 RIOT_API_KEY > 此处的 riot_api_key > 自动刷新
-    "riot_api_key": "",
-    # Riot 账号（用于自动刷新 Key，每 24h 自动登录获取新 Key）
-    "riot_username": "",
-    "riot_password": "",
+    # ── citoapi（赛程/排名/比赛详情/实时数据） ──
+    # API Key 优先级: 环境变量 CITO_API_KEY > 此处的 cito_api_key > 内置 Key
+    # citoapi Key 长期有效，无需刷新
+    "cito_api_key": "",
     # ── B站: 英雄联盟赛事官方号（视频推送） ──
     "bilibili_uid": "50329118",
     "enable_bilibili_video_push": True,

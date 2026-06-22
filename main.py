@@ -4,17 +4,19 @@ Provides LoL esports push notifications and on-demand query commands.
 
 Commands (prefix /lol):
     /lol help
-    /lol schedule [lck|lpl] [regular|playoff] [season]
-    /lol next [lck|lpl] [regular|playoff] [season]
-    /lol live [lck|lpl]
-    /lol result [lck|lpl] [regular|playoff] [round]
-    /lol bp [lck|lpl] [regular|playoff] [round]
-    /lol detail [lck|lpl] [regular|playoff] [round]
-    /lol standings [lck|lpl] [regular|playoff] [season]
+    /lol schedule [league] [regular|playoff] [season]
+    /lol next [league] [regular|playoff] [season]
+    /lol live [league]
+    /lol result [league] [regular|playoff] [round]
+    /lol bp [league] [regular|playoff] [round]
+    /lol detail [league] [regular|playoff] [round]
+    /lol standings [league] [regular|playoff] [season]
     /lol subscribe
     /lol unsubscribe
-    /lol apikey [key]        查看/设置 Riot API Key 状态
+    /lol apikey [key]        查看/设置 citoapi Key 状态
     /lol test [season]
+
+League: lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from .src.astrbot_plugin_lol_notifier.fetcher import api
-from .src.astrbot_plugin_lol_notifier.fetcher.api_key_manager import get_key_manager
+from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import get_api_key, set_api_key
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
 from .src.astrbot_plugin_lol_notifier.models import Failure, Success
@@ -36,25 +38,27 @@ from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 HELP_TEXT = """🎮 LoL Notifier 指令列表
 
 查询命令：
-  /lol schedule [lck|lpl] [regular|playoff] [season]
+  /lol schedule [league] [regular|playoff] [season]
       近期赛程（默认最近 5 场，按赛区与赛段筛选）
-  /lol next [lck|lpl] [regular|playoff] [season]
+  /lol next [league] [regular|playoff] [season]
       下一场完整时间表
-  /lol live [lck|lpl]
+  /lol live [league]
       正在进行的实时比赛（击杀/经济/塔/龙/男爵）
-  /lol result [lck|lpl] [regular|playoff] [round]
+  /lol result [league] [regular|playoff] [round]
       比赛结果（默认最近一场）
-  /lol bp [lck|lpl] [regular|playoff] [round]
+  /lol bp [league] [regular|playoff] [round]
       单局 BP（默认最近一场）
-  /lol detail [lck|lpl] [regular|playoff] [round]
+  /lol detail [league] [regular|playoff] [round]
       比赛详细信息（默认最近一场）
-  /lol standings [lck|lpl] [regular|playoff] [season]
+  /lol standings [league] [regular|playoff] [season]
       排名 / 积分榜
+
+  可用赛区: lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
 
 管理命令：
   /lol subscribe     订阅当前会话的自动推送
   /lol unsubscribe   取消当前会话的自动推送
-  /lol apikey [key|refresh]  查看/设置 Key、设置 Cookie、强制刷新
+  /lol apikey [key|refresh]  查看/设置 Key、强制刷新
   /lol test [season]        测试插件各项查询功能
 
 已实现的自动推送（订阅后自动触发）：
@@ -121,15 +125,10 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result(f"❌ {err}")
 
     async def initialize(self) -> None:
-        """Initialize API Key manager and start scheduler."""
-        # 初始化 API Key 管理器（赛程/排名等功能依赖此 Key）
-        km = get_key_manager()
-        await km.initialize(
-            config=dict(self.config) if self.config else None,
-            data_dir="data",
-        )
-        status = await km.check_status()
-        logger.info(f"[LoLNotifier] API Key: {status['status']}")
+        """Initialize plugin and start scheduler."""
+        key = get_api_key()
+        masked = key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
+        logger.info(f"[LoLNotifier] citoapi Key: {masked}")
 
         self.scheduler.start()
         logger.info("[LoLNotifier] Plugin initialized.")
@@ -347,51 +346,35 @@ class LoLNotifierPlugin(Star):
         event: AstrMessageEvent,
         key: str = "",
     ):
-        """查看/设置 Riot API Key 状态。
+        """查看/设置 citoapi Key 状态。
 
         /lol apikey                    查看 Key 状态
-        /lol apikey RGAPI-xxx          手动设置 Key
-        /lol apikey refresh            强制刷新（需已配 Cookie 或账号密码）
-        /lol apikey cookie {\"name\":\"value\"}  设置浏览器 Cookie（JSON）
+        /lol apikey <your-key>         手动设置 Key
         """
-        km = get_key_manager()
         arg = key.strip()
 
-        # 强制刷新
-        if arg.lower() == "refresh":
-            yield event.plain_result("🔄 正在强制刷新 API Key...")
-            result = await km.force_refresh()
-            yield event.plain_result(result["message"])
+        if arg:
+            set_api_key(arg)
+            new_key = get_api_key()
+            masked = new_key[:8] + "****" + new_key[-4:] if len(new_key) > 12 else "****"
+            yield event.plain_result(f"✅ citoapi Key 已更新: {masked}")
             return
 
-        # 设置 Cookie（JSON 格式）
-        if arg.startswith("{"):
-            result = await km.set_cookies(arg)
-            yield event.plain_result(result["message"])
-            return
-
-        # 设置 Key
-        if arg and len(arg) > 10:
-            ok = await km.set_key(arg)
-            if ok:
-                yield event.plain_result("✅ API Key 设置成功并通过验证！")
-            else:
-                yield event.plain_result(
-                    "⚠️ API Key 已设置但验证未通过，可能无效。\n"
-                    "请检查 Key 是否正确: https://developer.riotgames.com/"
-                )
-            return
-
-        # 查看状态
-        status = await km.check_status()
+        current = get_api_key()
+        masked = current[:8] + "****" + current[-4:] if len(current) > 12 else "****"
+        import os
+        source = (
+            "环境变量 CITO_API_KEY" if os.environ.get("CITO_API_KEY", "").strip()
+            else "手动设置" if current != "cito_dc5cfcfa4b9aca180e71c0e1282be83ef2bfc7658b9658ee5c88813fb6163091"
+            else "内置 Key"
+        )
         yield event.plain_result(
-            f"🔑 Riot API Key 状态\n\n{status['message']}\n\n"
-            f"💡 提示:\n"
-            f"  • 设置 Key: /lol apikey <你的key>\n"
-            f"  • 设置 Cookie: /lol apikey cookie {{\"name\":\"value\"}}\n"
-            f"  • 强制刷新: /lol apikey refresh\n"
-            f"  • 环境变量: RIOT_API_KEY\n"
-            f"  • 获取 Key: https://developer.riotgames.com/"
+            f"🔑 citoapi Key 状态\n\n"
+            f"  Key: {masked}\n"
+            f"  来源: {source}\n"
+            f"  citoapi Key 长期有效，无需刷新\n\n"
+            f"💡 设置新 Key: /lol apikey <你的key>\n"
+            f"💡 环境变量: CITO_API_KEY"
         )
 
     @lol.command("test")
@@ -416,8 +399,10 @@ class LoLNotifierPlugin(Star):
 
         results: list[tuple[str, bool, str]] = list(
             await asyncio.gather(
-                run("赛程", api.get_schedule("lck", "regular", year)),
-                run("比赛结果", api.get_match_result("lck", "regular", "last")),
+                run("赛程(LCK)", api.get_schedule("lck", "regular", year)),
+                run("赛程(LPL)", api.get_schedule("lpl", "regular", year)),
+                run("赛程(LEC)", api.get_schedule("lec", "regular", year)),
+                run("实时比赛", api.get_match_result("lck", "regular", "last")),
                 run("BP", api.get_match_bp("lpl", "regular", "last")),
                 run("详细信息", api.get_match_detail("lpl", "regular", "last")),
                 run("积分/排名", api.get_standings("lck", "regular", year)),
