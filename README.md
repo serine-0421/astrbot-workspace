@@ -39,12 +39,12 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `search <关键词>` | 搜索战队（获取战队 ID） | `/lol team search T1` |
-| `info <战队ID>` | 战队详细信息 | `/lol team info T1` |
-| `roster <战队ID>` | 当前阵容列表 | `/lol team roster T1` |
-| `matches <战队ID>` | 近期比赛记录 | `/lol team matches T1` |
-| `stats <战队ID>` | 赛季统计数据 | `/lol team stats T1` |
-| `h2h <战队A> <战队B>` | 两队历史交手记录 | `/lol team h2h T1 GEN` |
+| `search <关键词>` | 搜索战队（获取战队 ID） | `/lol team search BLG` |
+| `info <战队ID>` | 战队详细信息 | `/lol team info BLG` |
+| `roster <战队ID>` | 当前阵容列表 | `/lol team roster BLG` |
+| `matches <战队ID>` | 近期比赛记录 | `/lol team matches BLG` |
+| `stats <战队ID>` | 赛季统计数据 | `/lol team stats BLG` |
+| `h2h <战队A> <战队B>` | 两队历史交手记录 | `/lol team h2h BLG TES` |
 
 ### 🔹 选手 — `/lol player`
 
@@ -59,10 +59,10 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `info <锦标赛ID>` | 锦标赛详情 | `/lol tournament info worlds2024` |
-| `standings <锦标赛ID>` | 锦标赛积分榜 | `/lol tournament standings worlds2024` |
-| `bracket <锦标赛ID>` | 淘汰赛对阵图 | `/lol tournament bracket worlds2024` |
-| `mvp <锦标赛ID>` | 锦标赛 MVP | `/lol tournament mvp worlds2024` |
+| `info <锦标赛ID>` | 锦标赛详情 | `/lol tournament info worlds2025` |
+| `standings <锦标赛ID>` | 锦标赛积分榜 | `/lol tournament standings worlds2025` |
+| `bracket <锦标赛ID>` | 淘汰赛对阵图 | `/lol tournament bracket worlds2025` |
+| `mvp <锦标赛ID>` | 锦标赛 MVP | `/lol tournament mvp worlds2025` |
 
 ### 🔹 英雄数据 — `/lol champion`
 
