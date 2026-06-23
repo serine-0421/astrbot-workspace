@@ -488,7 +488,7 @@ class LoLNotifierPlugin(Star):
     #  战队子命令组
     # ═══════════════════════════════════════════════
 
-    @lol.command_group("team")
+    @lol.group("team")
     def lol_team(self) -> None:
         """战队查询"""
 
@@ -574,7 +574,7 @@ class LoLNotifierPlugin(Star):
     #  选手子命令组
     # ═══════════════════════════════════════════════
 
-    @lol.command_group("player")
+    @lol.group("player")
     def lol_player(self) -> None:
         """选手查询"""
 
@@ -634,7 +634,7 @@ class LoLNotifierPlugin(Star):
     #  锦标赛子命令组
     # ═══════════════════════════════════════════════
 
-    @lol.command_group("tournament")
+    @lol.group("tournament")
     def lol_tournament(self) -> None:
         """锦标赛查询"""
 
@@ -694,7 +694,7 @@ class LoLNotifierPlugin(Star):
     #  英雄 / 排名 / 排行榜 / 趋势 / 历史
     # ═══════════════════════════════════════════════
 
-    @lol.command_group("champion")
+    @lol.group("champion")
     def lol_champion(self) -> None:
         """英雄数据"""
 
@@ -718,7 +718,7 @@ class LoLNotifierPlugin(Star):
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
-    @lol.command_group("ranking")
+    @lol.group("ranking")
     def lol_ranking(self) -> None:
         """排行榜查询"""
 
