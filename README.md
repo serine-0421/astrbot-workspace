@@ -13,7 +13,9 @@ cd AstrBot/data/plugins
 git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 ```
 
-依赖：[AstrBot](https://github.com/AstrBotDevs/AstrBot)、`httpx`、`aiohttp`、`pillow`
+依赖：
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) >= 适配当前 API 版本
+- `httpx`、`aiohttp`、`pillow`
 ---
 
 ## 📖 命令参考
