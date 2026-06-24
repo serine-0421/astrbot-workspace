@@ -39,9 +39,11 @@ if TYPE_CHECKING:
 
 # 主轮询间隔: 5 分钟（用于 B站/微博等第三方平台检查）
 POLL_INTERVAL = 300
-# 赛程数据轮询间隔: 30 分钟（citoapi 每月限 500 次）
+# 是否允许后台轮询消耗 citoapi 配额（配额紧张时设为 False）
+SCHEDULER_API_ENABLED = False
+# 赛程数据轮询间隔: 30 分钟（citoapi 每月限 500 次）— 仅在 SCHEDULER_API_ENABLED=True 时生效
 SCHEDULE_POLL_INTERVAL = 1800
-# 实时比赛轮询间隔: 3 分钟
+# 实时比赛轮询间隔: 3 分钟 — 仅在 SCHEDULER_API_ENABLED=True 时生效
 LIVE_POLL_INTERVAL = 180
 # 并行广播并发数
 BROADCAST_CONCURRENCY = 5
@@ -164,8 +166,7 @@ class LoLScheduler:
 
         不同数据源使用不同的轮询间隔以保护 citoapi 配额（每月 500 次）：
         - B站/微博：每轮都检查（不消耗 citoapi 配额）
-        - 实时比赛：每 LIVE_POLL_INTERVAL 秒检查一次
-        - 赛程/排名：每 SCHEDULE_POLL_INTERVAL 秒检查一次
+        - citoapi 赛事数据：仅在 SCHEDULER_API_ENABLED=True 时轮询
         """
         now = datetime.now(timezone.utc)
         now_ts = time.monotonic()
@@ -180,6 +181,10 @@ class LoLScheduler:
 
         # 3. B站 BLG官号 → BP图文动态
         await self._check_blg_bp_dynamics()
+
+        # ═══ citoapi 赛事推送（配额紧张时跳过） ═══
+        if not SCHEDULER_API_ENABLED:
+            return
 
         # ═══ 实时比赛轮询（消耗 citoapi，按间隔控制） ═══
         if now_ts - self._last_live_poll >= LIVE_POLL_INTERVAL:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import traceback
 from datetime import datetime
 from typing import Any
 
@@ -205,7 +206,7 @@ async def _request(endpoint: str, params: dict | None = None) -> dict[str, Any]:
                 error_msg += " — citoapi 服务器错误，请稍后重试"
             else:
                 error_msg += f" — {detail}"
-            logger.warning(f"[citoapi] {error_msg}")
+            logger.error(f"[citoapi] {error_msg}\n{traceback.format_exc()}")
             return {"_error": error_msg, "_status": status}
         except Exception as exc:
             if attempt < _MAX_RETRIES:
@@ -213,8 +214,9 @@ async def _request(endpoint: str, params: dict | None = None) -> dict[str, Any]:
                 logger.debug(f"[citoapi] 网络异常重试 {attempt + 1}/{_MAX_RETRIES}: {exc}")
                 await asyncio.sleep(delay)
                 continue
-            error_msg = f"网络请求异常: {exc}"
-            logger.debug(f"[citoapi] {error_msg}")
+            exc_type = type(exc).__name__
+            error_msg = f"网络请求异常 [{exc_type}]: {exc}"
+            logger.error(f"[citoapi] {error_msg}\n{traceback.format_exc()}")
             return {"_error": error_msg, "_status": 0}
 
     return {"_error": "请求失败: 重试次数已耗尽", "_status": 429}
