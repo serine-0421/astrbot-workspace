@@ -185,6 +185,7 @@ class LoLNotifierPlugin(Star):
 
     # ──────────────────── command_group ────────────────────────────
     @filter.command_group("lol")
+    @filter.event_message_type(filter.EventMessageType.ALL)
     def lol(self) -> None:
         """LoL 赛事查询与推送"""
 
