@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import datetime
 from typing import Any
 
@@ -141,35 +143,81 @@ async def _get_client() -> httpx.AsyncClient:
     return _client
 
 
+# ── 速率限制 ──
+
+# 每月 500 次限额 → 安全速率: 每次调用至少间隔 3 秒
+_MIN_REQUEST_INTERVAL: float = 3.0
+_last_request_time: float = 0.0
+_rate_lock = asyncio.Lock()
+
+# 429 重试配置
+_MAX_RETRIES: int = 3
+_RETRY_BASE_DELAY: float = 5.0  # 首次重试等 5s，之后指数增长
+
+
+async def _rate_limit_wait() -> None:
+    """确保两次 API 调用之间至少间隔 _MIN_REQUEST_INTERVAL 秒。"""
+    global _last_request_time
+    async with _rate_lock:
+        now = time.monotonic()
+        elapsed = now - _last_request_time
+        if elapsed < _MIN_REQUEST_INTERVAL:
+            wait = _MIN_REQUEST_INTERVAL - elapsed
+            logger.debug(f"[citoapi] 速率限制: 等待 {wait:.1f}s")
+            await asyncio.sleep(wait)
+        _last_request_time = time.monotonic()
+
+
 # ── 通用请求 ──
 
 async def _request(endpoint: str, params: dict | None = None) -> dict[str, Any]:
     url = f"{_BASE_URL}{endpoint}" if not endpoint.startswith("http") else endpoint
-    try:
-        client = await _get_client()
-        resp = await client.get(url, params=params or {})
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as e:
-        status = e.response.status_code
-        detail = e.response.text[:300]
-        error_msg = f"HTTP {status}"
-        if status == 403:
-            error_msg += " — API Key 无效或已过期"
-        elif status == 401:
-            error_msg += " — API Key 未授权"
-        elif status == 429:
-            error_msg += " — 请求频率过高，请稍后重试"
-        elif status >= 500:
-            error_msg += " — citoapi 服务器错误，请稍后重试"
-        else:
-            error_msg += f" — {detail}"
-        logger.warning(f"[citoapi] {error_msg}")
-        return {"_error": error_msg, "_status": status}
-    except Exception as exc:
-        error_msg = f"网络请求异常: {exc}"
-        logger.debug(f"[citoapi] {error_msg}")
-        return {"_error": error_msg, "_status": 0}
+
+    for attempt in range(_MAX_RETRIES + 1):
+        await _rate_limit_wait()
+        try:
+            client = await _get_client()
+            resp = await client.get(url, params=params or {})
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            detail = e.response.text[:300]
+
+            # 429 → 指数退避重试
+            if status == 429 and attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning(
+                    f"[citoapi] 429 请求频率过高，第 {attempt + 1}/{_MAX_RETRIES} 次重试，"
+                    f"等待 {delay:.0f}s..."
+                )
+                await asyncio.sleep(delay)
+                continue
+
+            error_msg = f"HTTP {status}"
+            if status == 403:
+                error_msg += " — API Key 无效或已过期"
+            elif status == 401:
+                error_msg += " — API Key 未授权"
+            elif status == 429:
+                error_msg += " — 请求频率过高，重试已耗尽"
+            elif status >= 500:
+                error_msg += " — citoapi 服务器错误，请稍后重试"
+            else:
+                error_msg += f" — {detail}"
+            logger.warning(f"[citoapi] {error_msg}")
+            return {"_error": error_msg, "_status": status}
+        except Exception as exc:
+            if attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                logger.debug(f"[citoapi] 网络异常重试 {attempt + 1}/{_MAX_RETRIES}: {exc}")
+                await asyncio.sleep(delay)
+                continue
+            error_msg = f"网络请求异常: {exc}"
+            logger.debug(f"[citoapi] {error_msg}")
+            return {"_error": error_msg, "_status": 0}
+
+    return {"_error": "请求失败: 重试次数已耗尽", "_status": 429}
 
 
 # ═══════════════════════════════════════════════════

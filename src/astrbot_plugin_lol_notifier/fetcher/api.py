@@ -3,9 +3,13 @@
 所有函数均返回 ApiResult 类型（Success | Failure），供上层命令处理器消费。
 数据来源：citoapi (https://api.citoapi.com/api/v1)。
 支持 14 个赛区：LCK, LPL, LEC, LCS, LCO, LCL, LJL, PCS, VCS, CBLOL, LLA, TCL, MSI, Worlds。
+
+内置 TTL 缓存以降低 API 调用频率（每月限额 500 次）。
 """
 
 from __future__ import annotations
+
+import time
 
 from ..models import (
     BpResult,
@@ -32,6 +36,33 @@ SUPPORTED_LEAGUES = {
 }
 SUPPORTED_STAGES = {"regular", "playoff"}
 
+# ── TTL 缓存（降低 citoapi 调用次数，每月限额 500 次） ──
+
+# 缓存条目: {"result": ..., "ts": float}
+_cache: dict[str, dict] = {}
+
+# 赛程数据变化慢，缓存 10 分钟
+_SCHEDULE_CACHE_TTL: float = 600.0
+# 排名数据变化慢，缓存 15 分钟
+_STANDINGS_CACHE_TTL: float = 900.0
+# 实时比赛数据变化快，缓存 2 分钟
+_LIVE_CACHE_TTL: float = 120.0
+
+
+def _cache_key(*args: str) -> str:
+    return ":".join(str(a) for a in args)
+
+
+def _cache_get(key: str) -> dict | None:
+    entry = _cache.get(key)
+    if entry and (time.monotonic() - entry["ts"]) < entry.get("ttl", _SCHEDULE_CACHE_TTL):
+        return entry["result"]
+    return None
+
+
+def _cache_set(key: str, result, ttl: float = _SCHEDULE_CACHE_TTL) -> None:
+    _cache[key] = {"result": result, "ts": time.monotonic(), "ttl": ttl}
+
 
 async def close_session() -> None:
     """关闭 HTTP 连接池。"""
@@ -49,6 +80,11 @@ async def get_schedule(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
+    cache_key = _cache_key("schedule", league_n, str(stage), str(season))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     from .lolesports import fetch_schedule
 
     result = await fetch_schedule(league=league_n)
@@ -56,8 +92,12 @@ async def get_schedule(
         # 按 stage 过滤
         stage_n = normalize_stage(stage) or "regular"
         filtered = [m for m in result.value if m.stage == stage_n or stage_n == "regular"]
-        return Success(value=filtered)
-    return result
+        wrapped = Success(value=filtered)
+    else:
+        wrapped = result
+
+    _cache_set(cache_key, wrapped, _SCHEDULE_CACHE_TTL)
+    return wrapped
 
 
 # ── 比赛结果 ──
@@ -181,9 +221,16 @@ async def get_standings(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
+    cache_key = _cache_key("standings", league_n, str(stage), str(season))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     from .lolesports import fetch_standings
 
-    return await fetch_standings(league=league_n)
+    result = await fetch_standings(league=league_n)
+    _cache_set(cache_key, result, _STANDINGS_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -36,7 +37,13 @@ if TYPE_CHECKING:
     from astrbot.core.star.context import Context
 
 
-POLL_INTERVAL = 60
+# 主轮询间隔: 5 分钟（用于 B站/微博等第三方平台检查）
+POLL_INTERVAL = 300
+# 赛程数据轮询间隔: 30 分钟（citoapi 每月限 500 次）
+SCHEDULE_POLL_INTERVAL = 1800
+# 实时比赛轮询间隔: 3 分钟
+LIVE_POLL_INTERVAL = 180
+# 并行广播并发数
 BROADCAST_CONCURRENCY = 5
 
 
@@ -53,6 +60,9 @@ class LoLScheduler:
         self._state: NotificationState = default_state()
         self._task: asyncio.Task | None = None
         self._loaded = False
+        # 用于分离不同数据的轮询频率
+        self._last_schedule_poll: float = 0.0
+        self._last_live_poll: float = 0.0
         img.configure(config)
 
     # ── 属性 ──
@@ -150,10 +160,17 @@ class LoLScheduler:
                 await asyncio.sleep(POLL_INTERVAL)
 
     async def _check_and_notify(self) -> None:
-        """主推送检查逻辑：按时机触发各类通知"""
-        now = datetime.now(timezone.utc)
+        """主推送检查逻辑：按时机触发各类通知。
 
-        # ═══ 第三方平台推送（独立于赛程数据） ═══
+        不同数据源使用不同的轮询间隔以保护 citoapi 配额（每月 500 次）：
+        - B站/微博：每轮都检查（不消耗 citoapi 配额）
+        - 实时比赛：每 LIVE_POLL_INTERVAL 秒检查一次
+        - 赛程/排名：每 SCHEDULE_POLL_INTERVAL 秒检查一次
+        """
+        now = datetime.now(timezone.utc)
+        now_ts = time.monotonic()
+
+        # ═══ 第三方平台推送（不消耗 citoapi 配额，每轮都执行） ═══
 
         # 1. B站 LOL官号 → 视频更新
         await self._check_bilibili_videos()
@@ -164,10 +181,15 @@ class LoLScheduler:
         # 3. B站 BLG官号 → BP图文动态
         await self._check_blg_bp_dynamics()
 
-        # ═══ 实时比赛轮询（独立于赛程 API） ═══
-        await self._check_live_matches()
+        # ═══ 实时比赛轮询（消耗 citoapi，按间隔控制） ═══
+        if now_ts - self._last_live_poll >= LIVE_POLL_INTERVAL:
+            self._last_live_poll = now_ts
+            await self._check_live_matches()
 
-        # ═══ 赛事数据推送（依赖赛程 API） ═══
+        # ═══ 赛事数据推送（消耗 citoapi，按间隔控制） ═══
+        if now_ts - self._last_schedule_poll < SCHEDULE_POLL_INTERVAL:
+            return
+        self._last_schedule_poll = now_ts
 
         schedule_result = await fetcher_api.get_schedule("lck", "regular", "current")
         if isinstance(schedule_result, Failure):
