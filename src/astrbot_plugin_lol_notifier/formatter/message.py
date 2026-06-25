@@ -498,12 +498,33 @@ def format_team_stats(data: dict) -> str:
 
 def format_tournament_info(data: dict) -> str:
     """格式化锦标赛信息。"""
-    name = data.get("name", data.get("title", "未知赛事"))
-    league = data.get("league", "")
-    season = data.get("season", "")
-    status = data.get("status", "")
-    start = data.get("startDate", data.get("start", ""))
-    end = data.get("endDate", data.get("end", ""))
+    # 如果 API 返回的是列表，取第一个元素
+    if isinstance(data, list):
+        if not data:
+            return "🏆 暂无锦标赛数据。"
+        data = data[0] if isinstance(data[0], dict) else {}
+        if not isinstance(data, dict):
+            return "🏆 暂无锦标赛数据。"
+
+    # 尝试多种嵌套路径
+    inner = data.get("tournament", data.get("event", data))
+    if isinstance(inner, dict):
+        name = inner.get("name", inner.get("title", data.get("name", data.get("title", "未知赛事"))))
+        status = inner.get("status", data.get("status", inner.get("state", "")))
+        league = inner.get("league", data.get("league", ""))
+        season = inner.get("season", data.get("season", ""))
+        start = inner.get("startDate", inner.get("start", data.get("startDate", data.get("start", ""))))
+        end = inner.get("endDate", inner.get("end", data.get("endDate", data.get("end", ""))))
+        # league 可能是 dict
+        if isinstance(league, dict):
+            league = league.get("name", league.get("slug", ""))
+    else:
+        name = data.get("name", data.get("title", "未知赛事"))
+        status = data.get("status", data.get("state", ""))
+        league = data.get("league", "")
+        season = data.get("season", "")
+        start = data.get("startDate", data.get("start", ""))
+        end = data.get("endDate", data.get("end", ""))
     lines = [f"🏆 {name}"]
     if league:
         lines.append(f"联赛: {league}")
@@ -728,26 +749,41 @@ def format_trending(data: dict) -> str:
 
 def format_history(data: dict, title: str = "历史数据") -> str:
     """格式化历史赛事数据。"""
-    winners = data.get("winners", data.get("results", data.get("data", [])))
+    # 如果 API 直接返回列表
+    if isinstance(data, list):
+        winners = data
+    else:
+        winners = data.get("winners", data.get("results", data.get("data", data.get("history", []))))
+
     if not winners:
         return f"📜 {title}: 暂无数据。"
     lines = [f"📜 {title}\n"]
     for w in winners[:15]:
-        year = w.get("year", w.get("season", ""))
-        team = w.get("winner", w.get("team", w.get("name", "?")))
-        if isinstance(team, dict):
-            team = team.get("name", team.get("code", "?"))
-        lines.append(f"  {year}: {team}")
+        if isinstance(w, dict):
+            year = w.get("year", w.get("season", ""))
+            team = w.get("winner", w.get("team", w.get("name", "?")))
+            if isinstance(team, dict):
+                team = team.get("name", team.get("code", "?"))
+            lines.append(f"  {year}: {team}")
+        elif isinstance(w, str):
+            lines.append(f"  {w}")
     return "\n".join(lines)
 
 
 def format_transfers(data: dict) -> str:
     """格式化转会信息。"""
-    transfers = data.get("transfers", data.get("data", []))
+    # 处理 API 直接返回列表的情况
+    if isinstance(data, list):
+        transfers = data
+    else:
+        transfers = data.get("transfers", data.get("data", data.get("players", [])))
     if not transfers:
         return "🔄 暂无转会数据。"
     lines = [f"🔄 转会信息 ({len(transfers)} 条)\n"]
     for t in transfers[:15]:
+        if not isinstance(t, dict):
+            lines.append(f"  {t}")
+            continue
         player = t.get("player", t.get("name", "?"))
         if isinstance(player, dict):
             player = player.get("name", player.get("handle", "?"))
@@ -763,11 +799,18 @@ def format_transfers(data: dict) -> str:
 
 def format_records(data: dict) -> str:
     """格式化赛事记录/里程碑。"""
-    records = data.get("records", data.get("data", data.get("milestones", [])))
+    # 处理 API 直接返回列表的情况
+    if isinstance(data, list):
+        records = data
+    else:
+        records = data.get("records", data.get("data", data.get("milestones", [])))
     if not records:
         return "🏅 暂无赛事记录。"
     lines = ["🏅 赛事记录\n"]
     for r in records[:15]:
+        if not isinstance(r, dict):
+            lines.append(f"  {r}")
+            continue
         title = r.get("title", r.get("record", r.get("description", "")))
         holder = r.get("holder", r.get("player", r.get("team", "")))
         val = r.get("value", r.get("score", ""))

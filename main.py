@@ -229,7 +229,23 @@ class LoLNotifierPlugin(Star):
         result = await api.get_schedule(league, stage, season)
         match result:
             case Success(value=schedule) if schedule:
-                next_match = schedule[0]
+                # 按日期+时间排序，优先取未开赛的最近一场
+                sorted_matches = sorted(
+                    schedule,
+                    key=lambda m: (m.start_date, m.start_time),
+                    reverse=True,
+                )
+                # 优先找未开赛的（unstarted），其次找正在进行中的
+                upcoming = [m for m in sorted_matches if m.status in ("unstarted", "")]
+                if upcoming:
+                    next_match = upcoming[-1]  # 日期最近但未开赛的最后一场
+                else:
+                    live = [m for m in sorted_matches if m.status in ("in_progress", "live")]
+                    if live:
+                        next_match = live[0]
+                    else:
+                        # 全完了，取最近完成的一场
+                        next_match = sorted_matches[0]
                 text = fmt.format_schedule([next_match], limit=1)
                 image_path = await img.render_schedule([next_match], limit=1)
                 yield await self._render_or_text(event, text, image_path)
@@ -821,17 +837,21 @@ class LoLNotifierPlugin(Star):
 
 def _parse_schedule_raw(data: dict) -> list:
     """从原始 JSON 中提取比赛列表为 LeagueMatch 列表。"""
-    if not isinstance(data, dict):
+    # 如果 API 返回列表，直接当作 events 处理
+    if isinstance(data, list):
+        events = data
+    elif not isinstance(data, dict):
         return []
-    # 尝试多种可能的嵌套路径提取 events
-    events = (
-        data.get("events")
-        or data.get("matches")
-        or data.get("schedule", {}).get("events")
-        or data.get("data", {}).get("events")
-        or data.get("data", {}).get("schedule", {}).get("events")
-        or []
-    )
+    else:
+        # 尝试多种可能的嵌套路径提取 events
+        events = (
+            data.get("events")
+            or data.get("matches")
+            or data.get("schedule", {}).get("events")
+            or data.get("data", {}).get("events")
+            or data.get("data", {}).get("schedule", {}).get("events")
+            or []
+        )
     if not events:
         return []
 

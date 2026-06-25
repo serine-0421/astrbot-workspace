@@ -79,6 +79,37 @@ def _cito_slug(user_slug: str) -> str:
     return _LEAGUE_SLUGS.get(user_slug.strip().lower(), "")
 
 
+def _resolve_tournament_slug(raw: str) -> str:
+    """将用户输入的锦标赛 ID 解析为 citoapi 使用的 slug。
+
+    例如 "worlds2025" → 尝试多种格式直到匹配。
+    如果都不匹配，返回原始输入。
+    """
+    raw = raw.strip()
+    # 尝试直接使用
+    if raw in _LEAGUE_SLUGS:
+        return _LEAGUE_SLUGS[raw]
+
+    # 尝试分离已知 league 基础名 + 年份
+    import re
+    m = re.match(r'^([a-zA-Z]+)(\d{4})$', raw)
+    if m:
+        base = m.group(1).lower()
+        year = m.group(2)
+        if base in _LEAGUE_SLUGS:
+            cito = _LEAGUE_SLUGS[base]
+            # lol-worlds → lol-worlds-2025
+            return f"{cito}-{year}"
+        # 尝试直接添加 lol- 前缀
+        return f"lol-{base}-{year}"
+
+    # 已有 lol- 前缀的就直接用
+    if raw.startswith("lol-"):
+        return raw
+
+    return raw
+
+
 def _user_slug_from_cito(cito_slug: str) -> str:
     for us, cs in _LEAGUE_SLUGS.items():
         if cs == cito_slug:
@@ -226,10 +257,14 @@ async def _api_call(endpoint: str, params: dict | None = None) -> JsonResult:
     """调用 citoapi 端点并自动处理错误。
 
     所有简单端点统一使用此函数，确保 _error 检查不被遗漏。
+    如果 API 返回顶层列表，自动包装为 {"data": [...]} 以兼容下游 dict 接口。
     """
     data = await _request(endpoint, params)
     if "_error" in data:
         return Failure(error=data["_error"])
+    # 如果 API 返回列表，包装为 {"data": [...]} 方便上游统一处理
+    if isinstance(data, list):
+        return Success(value={"data": data})
     return Success(value=data)
 
 
@@ -540,42 +575,50 @@ async def fetch_all_tournaments(league: str = "") -> JsonResult:
 
 async def fetch_tournament(tournament_id: str) -> JsonResult:
     """获取锦标赛信息 GET /lol/tournaments/{tournamentId}"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}")
 
 
 async def fetch_tournament_standings(tournament_id: str) -> JsonResult:
     """获取锦标赛积分榜 GET /lol/tournaments/{tournamentId}/standings"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/standings")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/standings")
 
 
 async def fetch_tournament_bracket(tournament_id: str) -> JsonResult:
     """获取锦标赛淘汰赛对阵 GET /lol/tournaments/{tournamentId}/bracket"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/bracket")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/bracket")
 
 
 async def fetch_tournament_matches(tournament_id: str, limit: int = 20) -> JsonResult:
     """获取锦标赛比赛列表 GET /lol/tournaments/{tournamentId}/matches"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/matches", {"limit": str(limit)})
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/matches", {"limit": str(limit)})
 
 
 async def fetch_tournament_mvp(tournament_id: str) -> JsonResult:
     """获取锦标赛 MVP GET /lol/tournaments/{tournamentId}/mvp"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/mvp")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/mvp")
 
 
 async def fetch_tournament_teams(tournament_id: str) -> JsonResult:
     """获取锦标赛参赛队伍 GET /lol/tournaments/{tournamentId}/teams"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/teams")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/teams")
 
 
 async def fetch_tournament_stats(tournament_id: str) -> JsonResult:
     """获取锦标赛统计数据 GET /lol/tournaments/{tournamentId}/stats"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/stats")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/stats")
 
 
 async def fetch_tournament_leaderboards(tournament_id: str) -> JsonResult:
     """获取锦标赛排行榜 GET /lol/tournaments/{tournamentId}/leaderboards"""
-    return await _api_call(f"/lol/tournaments/{tournament_id}/leaderboards")
+    slug = _resolve_tournament_slug(tournament_id)
+    return await _api_call(f"/lol/tournaments/{slug}/leaderboards")
 
 
 # ═══════════════════════════════════════════════════
@@ -959,13 +1002,14 @@ async def fetch_player_full_profile(player_id: str) -> JsonResult:
 
 async def fetch_tournament_full(tournament_id: str) -> JsonResult:
     """聚合获取锦标赛全貌（信息+积分榜+对阵+MVP+排行榜）"""
+    slug = _resolve_tournament_slug(tournament_id)
     results: dict[str, Any] = {}
     endpoints = {
-        "info": f"/lol/tournaments/{tournament_id}",
-        "standings": f"/lol/tournaments/{tournament_id}/standings",
-        "bracket": f"/lol/tournaments/{tournament_id}/bracket",
-        "mvp": f"/lol/tournaments/{tournament_id}/mvp",
-        "leaderboards": f"/lol/tournaments/{tournament_id}/leaderboards",
+        "info": f"/lol/tournaments/{slug}",
+        "standings": f"/lol/tournaments/{slug}/standings",
+        "bracket": f"/lol/tournaments/{slug}/bracket",
+        "mvp": f"/lol/tournaments/{slug}/mvp",
+        "leaderboards": f"/lol/tournaments/{slug}/leaderboards",
     }
     errors: list[str] = []
     for key, path in endpoints.items():
@@ -1027,10 +1071,18 @@ def _parse_match_event(ev: dict, league_slug: str) -> LeagueMatch | None:
         or str(m.get("id", ev.get("id", "")))
     )
 
+    # match_id: API 查找所需的真实 match id
+    match_id = str(
+        m.get("id", "")
+        or ev.get("matchId", "")
+        or ev.get("id", "")
+    )
+
     return LeagueMatch(
         league=league_slug.upper(),
         stage=strategy.get("type", ev.get("stage", "regular")) if strategy else "regular",
         round=round_val,
+        match_id=match_id,
         match_name=" vs ".join(teams) if teams else ev.get("name", ev.get("match_name", "")),
         bo_type=f"BO{bo}" if bo else "",
         start_date=dt[0],
@@ -1237,10 +1289,20 @@ async def fetch_match_detail(match_id: str) -> MatchDetail | None:
         logger.warning(f"[citoapi] match detail failed: {data['_error']}")
         return None
 
+    # 尝试多种嵌套路径找到 event/match 数据
     event = data.get("event", data.get("match", data))
+    if isinstance(event, list):
+        # API 可能返回列表，取第一个
+        event = event[0] if event else {}
     if not isinstance(event, dict):
+        logger.debug(f"[citoapi] match detail unexpected type: {type(data)}")
         return None
+
     match_obj = event.get("match", event)
+    if isinstance(match_obj, list):
+        match_obj = match_obj[0] if match_obj else {}
+    if not isinstance(match_obj, dict):
+        match_obj = event
 
     teams_raw = match_obj.get("teams", event.get("teams", []))
     teams = [t.get("name", t.get("code", "?")) for t in teams_raw] if isinstance(teams_raw, list) else []

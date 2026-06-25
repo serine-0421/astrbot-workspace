@@ -181,7 +181,8 @@ async def get_match_bp(
     if target is None:
         return Failure(error="未找到对应比赛。")
 
-    detail = await fetch_match_detail(target.round)
+    match_lookup_id = target.match_id or target.round
+    detail = await fetch_match_detail(match_lookup_id)
     if detail is None:
         return Failure(error="无法获取比赛详情。")
 
@@ -190,6 +191,7 @@ async def get_match_bp(
         league=target.league,
         stage=target.stage,
         round=target.round,
+        match_id=target.match_id,
         match_name=detail.match_name,
         bo_type=target.bo_type,
         start_date=target.start_date,
@@ -225,7 +227,8 @@ async def get_match_detail(
     if target is None:
         return Failure(error="未找到对应比赛。")
 
-    detail = await fetch_match_detail(target.round)
+    match_lookup_id = target.match_id or target.round
+    detail = await fetch_match_detail(match_lookup_id)
     if detail is None:
         return Failure(error="无法获取比赛详情。")
 

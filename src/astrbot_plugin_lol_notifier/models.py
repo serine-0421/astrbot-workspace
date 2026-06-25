@@ -47,6 +47,7 @@ class LeagueMatch:
     league: str = ""
     stage: str = ""
     round: str = ""
+    match_id: str = ""
     match_name: str = ""
     bo_type: str = ""
     start_date: str = ""
