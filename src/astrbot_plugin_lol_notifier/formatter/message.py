@@ -323,15 +323,43 @@ def format_team_info(data: dict) -> str:
 
 def format_team_roster(data: dict) -> str:
     """格式化战队阵容。"""
-    team_name = data.get("team", {}).get("name", "未知战队") if isinstance(data.get("team"), dict) else "未知战队"
-    players = data.get("players", data.get("roster", []))
+    team_name = data.get("team", {}).get("name", "未知战队") if isinstance(data.get("team"), dict) else data.get("name", "未知战队")
+    players = data.get("players", data.get("roster", data.get("data", [])))
     if not players:
         return f"📋 {team_name} 暂无阵容数据。"
     lines = [f"📋 {team_name} 战队阵容\n"]
-    for p in players:
-        name = p.get("name", p.get("handle", p.get("player", {}).get("name", "?")) if isinstance(p.get("player"), dict) else "?")
-        role = p.get("role", p.get("position", "—"))
-        lines.append(f"  {role:6} | {name}")
+    
+    # 按角色排序：TOP → JUNGLE → MID → ADC → SUPPORT
+    ROLE_ORDER = {"top": 0, "jungle": 1, "mid": 2, "adc": 3, "support": 4,
+                   "上单": 0, "打野": 1, "中单": 2, "下路": 3, "辅助": 4}
+    
+    def _role_sort_key(p):
+        role = (p.get("role") or p.get("position") or "").strip().lower()
+        for k, v in ROLE_ORDER.items():
+            if k in role:
+                return v
+        return 99  # unknown roles at end
+    
+    sorted_players = sorted(players, key=_role_sort_key)
+    
+    for p in sorted_players:
+        if isinstance(p, str):
+            lines.append(f"  {p}")
+            continue
+        # 提取选手名：支持多种字段名
+        name = p.get("name") or p.get("handle") or p.get("summonerName") or p.get("nickname") or ""
+        if not name and isinstance(p.get("player"), dict):
+            name = p["player"].get("name") or p["player"].get("handle") or "?"
+        if not name:
+            name = "?"
+        # 提取角色
+        role = (p.get("role") or p.get("position") or p.get("lane") or "—").strip().upper()
+        # 标准化角色名
+        role_map = {"TOP": "TOP", "JUNGLE": "JUNGLE", "JUG": "JUNGLE", "JG": "JUNGLE",
+                    "MID": "MID", "MIDDLE": "MID", "ADC": "ADC", "BOT": "ADC", "BOTTOM": "ADC",
+                    "SUPPORT": "SUPPORT", "SUP": "SUPPORT"}
+        role = role_map.get(role, role)
+        lines.append(f"  {role:7} | {name}")
     return "\n".join(lines)
 
 
@@ -599,7 +627,12 @@ def format_tournament_mvp(data: dict) -> str:
 
 def format_champion_stats(data: dict, limit: int = 10) -> str:
     """格式化英雄统计。"""
-    champs = data.get("champions", data.get("data", []))
+    if isinstance(data, list):
+        champs = data
+    else:
+        champs = (data.get("champions") or data.get("data") or data.get("results") or [])
+        if isinstance(champs, dict):
+            champs = (champs.get("champions") or champs.get("data") or [])
     if not champs:
         return "🎮 暂无英雄统计数据。"
     lines = ["🎮 英雄统计\n"]
@@ -608,7 +641,7 @@ def format_champion_stats(data: dict, limit: int = 10) -> str:
         games = c.get("games", c.get("gamesPlayed", 0))
         wins = c.get("wins", 0)
         kda = c.get("kda", "")
-        wr = f"{wins / games * 100:.1f}%" if games > 0 else "—"
+        wr = f"{wins / games * 100:.1f}%" if isinstance(games, (int, float)) and games > 0 else "—"
         parts = [f"  {name}: {games}场  {wr}"]
         if kda:
             parts.append(f"KDA {kda}")
@@ -639,7 +672,12 @@ def format_champion_presence(data: dict, limit: int = 10) -> str:
 
 def format_gpr_rankings(data: dict, limit: int = 20) -> str:
     """格式化全球战力排名。"""
-    rankings = data.get("rankings", data.get("teams", []))
+    if isinstance(data, list):
+        rankings = data
+    else:
+        rankings = (data.get("rankings") or data.get("teams") or data.get("data") or [])
+        if isinstance(rankings, dict):
+            rankings = (rankings.get("rankings") or rankings.get("teams") or [])
     if not rankings:
         return "🌍 暂无全球战力排名数据。"
     lines = [f"🌍 全球战力排名 (Top {min(limit, len(rankings))})\n"]
@@ -699,30 +737,60 @@ def format_leaderboard(data: dict, metric: str = "", limit: int = 15) -> str:
 
 def format_search_teams(data: dict) -> str:
     """格式化战队搜索结果。"""
-    teams = data.get("teams", data.get("results", data.get("data", [])))
+    # 处理包装后的数据
+    if isinstance(data, list):
+        teams = data
+    else:
+        teams = (data.get("teams") or data.get("results") or data.get("data") or [])
+        if isinstance(teams, dict):
+            teams = teams.get("teams") or teams.get("results") or teams.get("data") or []
     if not teams:
-        return "🔍 未找到匹配的战队。"
+        return "🔍 未找到匹配的战队。\n💡 提示：尝试使用英文全称（如 T1、GenG），或使用 /lol team info <全名>"
     lines = [f"🔍 战队搜索结果 ({len(teams)} 条)\n"]
     for t in teams[:10]:
-        name = t.get("name", t.get("code", "?"))
-        region = t.get("region", t.get("league", ""))
-        sid = t.get("id", t.get("teamId", ""))
-        lines.append(f"  {name}" + (f" ({region})" if region else "") + (f"  [{sid}]" if sid else ""))
+        if isinstance(t, str):
+            lines.append(f"  {t}")
+            continue
+        name = t.get("name") or t.get("code") or t.get("team") or "?"
+        if isinstance(name, dict):
+            name = name.get("name") or name.get("code") or "?"
+        region = (t.get("region") or t.get("league") or t.get("country") or "")
+        if isinstance(region, dict):
+            region = region.get("name") or region.get("slug") or ""
+        sid = t.get("id") or t.get("teamId") or t.get("slug") or ""
+        line = f"  {name}"
+        if region:
+            line += f" ({region})"
+        if sid:
+            line += f"  [{sid}]"
+        lines.append(line)
     return "\n".join(lines)
 
 
 def format_search_players(data: dict) -> str:
     """格式化选手搜索结果。"""
-    players = data.get("players", data.get("results", data.get("data", [])))
+    # 处理包装后的数据
+    if isinstance(data, list):
+        players = data
+    else:
+        players = (data.get("players") or data.get("results") or data.get("data") or [])
+        if isinstance(players, dict):
+            players = players.get("players") or players.get("results") or players.get("data") or []
     if not players:
-        return "🔍 未找到匹配的选手。"
+        return "🔍 未找到匹配的选手。\n💡 提示：尝试使用英文 ID（如 Faker、Chovy），确保大小写正确"
     lines = [f"🔍 选手搜索结果 ({len(players)} 条)\n"]
     for p in players[:10]:
-        name = p.get("name", p.get("handle", "?"))
-        team = p.get("team", {})
+        if isinstance(p, str):
+            lines.append(f"  {p}")
+            continue
+        name = (p.get("name") or p.get("handle") or p.get("summonerName") or 
+                p.get("nickname") or p.get("player") or "?")
+        if isinstance(name, dict):
+            name = name.get("name") or name.get("handle") or "?"
+        team = p.get("team") or p.get("teamName") or ""
         if isinstance(team, dict):
-            team = team.get("name", team.get("code", ""))
-        rid = p.get("id", p.get("playerId", ""))
+            team = team.get("name") or team.get("code") or ""
+        rid = p.get("id") or p.get("playerId") or p.get("slug") or ""
         parts = [f"  {name}"]
         if team:
             parts.append(f"({team})")
@@ -739,7 +807,28 @@ def format_trending(data: dict) -> str:
     lines = ["🔥 热门趋势\n"]
     for key, items in data.items():
         if isinstance(items, list) and items:
-            lines.append(f"  {key}: {len(items)} 项")
+            label = {"teams": "热门战队", "players": "热门选手", "matches": "热门比赛",
+                     "champions": "热门英雄", "tournaments": "热门赛事"}.get(key, key)
+            lines.append(f"━━ {label} ({len(items)}) ━━")
+            for item in items[:5]:
+                if isinstance(item, dict):
+                    name = item.get("name") or item.get("team") or item.get("player") or item.get("champion") or item.get("title") or ""
+                    if isinstance(name, dict):
+                        name = name.get("name") or name.get("code") or "?"
+                    # 附加信息
+                    extra = ""
+                    if "score" in item:
+                        extra = f" — {item['score']}"
+                    elif "points" in item:
+                        extra = f" — {item['points']}"
+                    elif "kda" in item:
+                        extra = f" — KDA {item['kda']}"
+                    lines.append(f"  {name}{extra}")
+                elif isinstance(item, str):
+                    lines.append(f"  {item}")
+            lines.append("")
+    if len(lines) == 1:
+        lines[0] = "🔥 暂无热门趋势数据。"
     return "\n".join(lines)
 
 
@@ -753,17 +842,32 @@ def format_history(data: dict, title: str = "历史数据") -> str:
     if isinstance(data, list):
         winners = data
     else:
-        winners = data.get("winners", data.get("results", data.get("data", data.get("history", []))))
+        # 尝试多种数据路径
+        winners = (data.get("winners") or data.get("results") or 
+                   data.get("data") or data.get("history") or data.get("tournaments") or [])
+        if isinstance(winners, dict):
+            # 可能在 data 包裹里
+            winners = (winners.get("winners") or winners.get("results") or 
+                       winners.get("history") or winners.get("tournaments") or [])
 
     if not winners:
         return f"📜 {title}: 暂无数据。"
     lines = [f"📜 {title}\n"]
     for w in winners[:15]:
         if isinstance(w, dict):
-            year = w.get("year", w.get("season", ""))
-            team = w.get("winner", w.get("team", w.get("name", "?")))
+            year = (w.get("year") or w.get("season") or w.get("edition") or "")
+            team = (w.get("winner") or w.get("team") or w.get("name") or 
+                    w.get("champion") or w.get("title") or "?")
             if isinstance(team, dict):
-                team = team.get("name", team.get("code", "?"))
+                team = (team.get("name") or team.get("code") or team.get("team") or "?")
+            # 如果 team 仍是 None，尝试其他路径
+            if team == "?" or team is None:
+                # 尝试从 result 路径提取
+                result = w.get("result", {})
+                if isinstance(result, dict):
+                    team = result.get("winner") or result.get("team") or "?"
+            if not team or team == "None":
+                team = "?"
             lines.append(f"  {year}: {team}")
         elif isinstance(w, str):
             lines.append(f"  {w}")
@@ -776,7 +880,7 @@ def format_transfers(data: dict) -> str:
     if isinstance(data, list):
         transfers = data
     else:
-        transfers = data.get("transfers", data.get("data", data.get("players", [])))
+        transfers = data.get("transfers", data.get("data", data.get("players", data.get("results", []))))
     if not transfers:
         return "🔄 暂无转会数据。"
     lines = [f"🔄 转会信息 ({len(transfers)} 条)\n"]
@@ -784,16 +888,35 @@ def format_transfers(data: dict) -> str:
         if not isinstance(t, dict):
             lines.append(f"  {t}")
             continue
-        player = t.get("player", t.get("name", "?"))
+        # 提取选手名：支持多种格式
+        player = (t.get("player") or t.get("name") or t.get("playerName") or 
+                  t.get("summonerName") or t.get("handle") or "")
         if isinstance(player, dict):
-            player = player.get("name", player.get("handle", "?"))
-        from_team = t.get("from", t.get("fromTeam", ""))
-        to_team = t.get("to", t.get("toTeam", ""))
+            player = player.get("name") or player.get("handle") or player.get("summonerName") or "?"
+        if not player:
+            player = "?"
+        
+        # 提取来源战队
+        from_team = (t.get("from") or t.get("fromTeam") or t.get("from_team") or 
+                     t.get("previousTeam") or t.get("oldTeam") or "")
         if isinstance(from_team, dict):
-            from_team = from_team.get("name", from_team.get("code", ""))
+            from_team = from_team.get("name") or from_team.get("code") or ""
+        
+        # 提取目标战队
+        to_team = (t.get("to") or t.get("toTeam") or t.get("to_team") or 
+                   t.get("newTeam") or t.get("currentTeam") or "")
         if isinstance(to_team, dict):
-            to_team = to_team.get("name", to_team.get("code", ""))
-        lines.append(f"  {player}: {from_team} → {to_team}")
+            to_team = to_team.get("name") or to_team.get("code") or ""
+        
+        # 提取日期/赛季
+        date = t.get("date") or t.get("season") or t.get("year") or ""
+        
+        line = f"  {player}"
+        if from_team or to_team:
+            line += f": {from_team} → {to_team}"
+        if date:
+            line += f"  ({date})"
+        lines.append(line)
     return "\n".join(lines)
 
 

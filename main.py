@@ -225,32 +225,47 @@ class LoLNotifierPlugin(Star):
         stage: str = "regular",
         season: str = "current",
     ):
-        """查看下一场完整时间表"""
+        """查看下一场完整时间表（仅显示未开始的比赛）"""
         result = await api.get_schedule(league, stage, season)
         match result:
             case Success(value=schedule) if schedule:
-                # 按日期+时间排序，优先取未开赛的最近一场
-                sorted_matches = sorted(
-                    schedule,
-                    key=lambda m: (m.start_date, m.start_time),
-                    reverse=True,
-                )
-                # 优先找未开赛的（unstarted），其次找正在进行中的
-                upcoming = [m for m in sorted_matches if m.status in ("unstarted", "")]
-                if upcoming:
-                    next_match = upcoming[-1]  # 日期最近但未开赛的最后一场
+                from datetime import datetime
+                now = datetime.now().strftime("%Y-%m-%d")
+                # 分离：未来的比赛 vs 已过去的比赛
+                unstarted = [m for m in schedule if m.status in ("unstarted", "")]
+                in_progress = [m for m in schedule if m.status in ("in_progress", "live")]
+                
+                # 在未开始的比赛中，找日期最近的（最近的未来比赛）
+                if unstarted:
+                    unstarted.sort(key=lambda m: (m.start_date, m.start_time))
+                    next_match = unstarted[0]  # 最近的未来比赛
+                    is_past = False
+                elif in_progress:
+                    next_match = in_progress[0]
+                    is_past = False
                 else:
-                    live = [m for m in sorted_matches if m.status in ("in_progress", "live")]
-                    if live:
-                        next_match = live[0]
+                    # 没有未来比赛，显示最近一次已完成的
+                    completed = [m for m in schedule if m.status in ("completed", "finished")]
+                    if completed:
+                        completed.sort(key=lambda m: (m.start_date, m.start_time), reverse=True)
+                        next_match = completed[0]
+                        is_past = True
                     else:
-                        # 全完了，取最近完成的一场
+                        sorted_matches = sorted(schedule, key=lambda m: (m.start_date, m.start_time), reverse=True)
                         next_match = sorted_matches[0]
-                text = fmt.format_schedule([next_match], limit=1)
+                        is_past = True
+
+                if is_past:
+                    # 显示为最近已完成 + 提示没有未来赛程
+                    text = fmt.format_schedule([next_match], limit=1)
+                    text = text.replace("📅 LoL 近期赛程", "📅 最近一场比赛（暂无未来赛程）")
+                else:
+                    text = fmt.format_schedule([next_match], limit=1)
+                    text = text.replace("📅 LoL 近期赛程", "⏭️ 下一场比赛")
                 image_path = await img.render_schedule([next_match], limit=1)
                 yield await self._render_or_text(event, text, image_path)
             case Success():
-                yield event.plain_result("📅 当前没有可显示的下一场赛程。")
+                yield event.plain_result("📅 当前没有可显示的赛程信息。")
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] /lol next error: {err}")
                 yield event.plain_result(f"❌ 获取下一场赛程失败：{err}")

@@ -68,6 +68,12 @@ _LEAGUE_SLUGS: dict[str, str] = {
     "tcl": "lol-tcl",
     "msi": "lol-msi",
     "worlds": "lol-worlds",
+    # 常见锦标赛别名
+    "msi2024": "lol-msi-2024",
+    "msi2023": "lol-msi-2023",
+    "worlds2024": "lol-worlds-2024",
+    "worlds2023": "lol-worlds-2023",
+    "worlds2022": "lol-worlds-2022",
 }
 
 
@@ -573,22 +579,30 @@ async def fetch_all_tournaments(league: str = "") -> JsonResult:
     return await _api_call("/lol/tournaments", params)
 
 
+async def _tournament_call(path: str, tournament_id: str) -> JsonResult:
+    """调用锦标赛 API，带 slug 回退机制。"""
+    slug = _resolve_tournament_slug(tournament_id)
+    result = await _api_call(f"/lol/tournaments/{slug}{path}")
+    if not result.ok and slug != tournament_id:
+        result2 = await _api_call(f"/lol/tournaments/{tournament_id}{path}")
+        if result2.ok:
+            return result2
+    return result
+
+
 async def fetch_tournament(tournament_id: str) -> JsonResult:
     """获取锦标赛信息 GET /lol/tournaments/{tournamentId}"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}")
+    return await _tournament_call("", tournament_id)
 
 
 async def fetch_tournament_standings(tournament_id: str) -> JsonResult:
     """获取锦标赛积分榜 GET /lol/tournaments/{tournamentId}/standings"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/standings")
+    return await _tournament_call("/standings", tournament_id)
 
 
 async def fetch_tournament_bracket(tournament_id: str) -> JsonResult:
     """获取锦标赛淘汰赛对阵 GET /lol/tournaments/{tournamentId}/bracket"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/bracket")
+    return await _tournament_call("/bracket", tournament_id)
 
 
 async def fetch_tournament_matches(tournament_id: str, limit: int = 20) -> JsonResult:
@@ -599,26 +613,22 @@ async def fetch_tournament_matches(tournament_id: str, limit: int = 20) -> JsonR
 
 async def fetch_tournament_mvp(tournament_id: str) -> JsonResult:
     """获取锦标赛 MVP GET /lol/tournaments/{tournamentId}/mvp"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/mvp")
+    return await _tournament_call("/mvp", tournament_id)
 
 
 async def fetch_tournament_teams(tournament_id: str) -> JsonResult:
     """获取锦标赛参赛队伍 GET /lol/tournaments/{tournamentId}/teams"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/teams")
+    return await _tournament_call("/teams", tournament_id)
 
 
 async def fetch_tournament_stats(tournament_id: str) -> JsonResult:
     """获取锦标赛统计数据 GET /lol/tournaments/{tournamentId}/stats"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/stats")
+    return await _tournament_call("/stats", tournament_id)
 
 
 async def fetch_tournament_leaderboards(tournament_id: str) -> JsonResult:
     """获取锦标赛排行榜 GET /lol/tournaments/{tournamentId}/leaderboards"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/leaderboards")
+    return await _tournament_call("/leaderboards", tournament_id)
 
 
 # ═══════════════════════════════════════════════════
@@ -1253,20 +1263,35 @@ async def fetch_standings(league: str = "lck") -> StandingsResult:
     if "_error" in data:
         return Failure(error=data["_error"])
 
-    standings_list = data.get("standings", data.get("data", {}).get("standings", []))
+    # 多层次回退提取 standings 数据
+    standings_list = (data.get("standings") or 
+                      data.get("data", {}).get("standings") or 
+                      data.get("results") or 
+                      data.get("data"))
+    if isinstance(standings_list, dict):
+        standings_list = (standings_list.get("standings") or 
+                          standings_list.get("data") or 
+                          standings_list.get("results") or [standings_list])
     if not standings_list and isinstance(data, list):
         standings_list = data
+    if isinstance(standings_list, dict) and not standings_list.get("teams") and not standings_list.get("entries"):
+        # 可能是被包了一层，展开
+        standings_list = [standings_list]
 
     entries: list[StandingEntry] = []
     for group in (standings_list if isinstance(standings_list, list) else [standings_list]):
-        teams_in_group = group.get("teams", group.get("entries", [])) if isinstance(group, dict) else []
+        if not isinstance(group, dict):
+            continue
+        teams_in_group = group.get("teams", group.get("entries", group.get("results", [])))
+        if isinstance(teams_in_group, dict):
+            teams_in_group = teams_in_group.get("teams", teams_in_group.get("entries", []))
         for team in (teams_in_group if isinstance(teams_in_group, list) else [teams_in_group]):
             if not isinstance(team, dict):
                 continue
             record = team.get("record", team.get("stats", {}))
             entries.append(StandingEntry(
                 rank=team.get("rank", team.get("position", 0)),
-                team_name=team.get("name", team.get("code", "?")),
+                team_name=team.get("name", team.get("code", team.get("team", "?"))),
                 wins=record.get("wins", record.get("win", 0)),
                 losses=record.get("losses", record.get("loss", 0)),
                 points=record.get("wins", record.get("points", record.get("win", 0))),

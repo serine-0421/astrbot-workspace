@@ -139,19 +139,23 @@ async def get_match_result(
         return result
 
     matches = result.value or []
-    # 筛选已完成的比赛
-    completed = [m for m in matches if m.status in ("completed", "finished")]
-    if not completed:
+    if not matches:
         return Success(value=None)
 
     # round_number: "last" → 最近一场已完成
     if isinstance(round_number, str) and round_number.lower() == "last":
+        completed = [m for m in matches if m.status in ("completed", "finished")]
         return Success(value=completed[-1] if completed else None)
 
-    # 按轮次查找
+    # 按轮次查找（先在已完成中找，再在所有中找）
     r = str(round_number)
-    for m in completed:
-        if m.round == r:
+    for m in matches:
+        if m.round == r or m.match_id == r:
+            if m.status in ("completed", "finished"):
+                return Success(value=m)
+    # 如果没找到已完成的，返回找到的（可能还没打）
+    for m in matches:
+        if m.round == r or m.match_id == r:
             return Success(value=m)
     return Success(value=None)
 
@@ -976,6 +980,7 @@ def _pick_match(matches: list[LeagueMatch], round_number: int | str) -> LeagueMa
         return matches[-1] if matches else None
     r = str(round_number)
     for m in matches:
-        if m.round == r:
+        # 优先匹配 round（如 "1", "2"），其次匹配 match_id（如 API 的原始 ID）
+        if m.round == r or m.match_id == r:
             return m
     return None
