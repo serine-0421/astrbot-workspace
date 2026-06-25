@@ -554,7 +554,7 @@ class LoLNotifierPlugin(Star):
         result = await api.get_team_stats(team_id)
         match result:
             case Success(value=data):
-                yield event.plain_result(fmt.format_player_stats(data))  # 通用统计格式
+                yield event.plain_result(fmt.format_team_stats(data))
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
@@ -823,10 +823,17 @@ def _parse_schedule_raw(data: dict) -> list:
     """从原始 JSON 中提取比赛列表为 LeagueMatch 列表。"""
     if not isinstance(data, dict):
         return []
-    events = data.get("events", data.get("matches", data.get("schedule", {}).get("events", [])))
+    # 尝试多种可能的嵌套路径提取 events
+    events = (
+        data.get("events")
+        or data.get("matches")
+        or data.get("schedule", {}).get("events")
+        or data.get("data", {}).get("events")
+        or data.get("data", {}).get("schedule", {}).get("events")
+        or []
+    )
     if not events:
         return []
-    from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import _LEAGUE_SLUGS
 
     results = []
     for ev in events:

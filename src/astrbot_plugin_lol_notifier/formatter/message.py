@@ -416,6 +416,82 @@ def format_player_champions(data: dict) -> str:
     return "\n".join(lines)
 
 
+def format_team_stats(data: dict) -> str:
+    """格式化战队统计数据。"""
+    # 战队名称提取
+    team_name = ""
+    if isinstance(data.get("team"), dict):
+        team_name = data["team"].get("name", data["team"].get("code", ""))
+    if not team_name:
+        team_name = data.get("name", data.get("code", "未知战队"))
+
+    lines = [f"📊 {team_name} 统计数据\n"]
+
+    # 战绩
+    wins = data.get("wins", data.get("win", 0))
+    losses = data.get("losses", data.get("loss", 0))
+    games = data.get("gamesPlayed", data.get("games", wins + losses))
+    wr_val = data.get("winRate", data.get("wr", 0))
+    if not wr_val and games > 0:
+        wr_val = wins / games
+    wr_str = f"{float(wr_val) * 100:.1f}%" if wr_val else ""
+    if games > 0:
+        lines.append(f"战绩: {wins}胜 {losses}负  |  胜率: {wr_str}  |  场次: {games}")
+
+    # KDA
+    kda = data.get("kda", data.get("avgKda", ""))
+    kills = data.get("avgKills", data.get("kills", data.get("avgKillsPerGame", 0)))
+    deaths = data.get("avgDeaths", data.get("deaths", data.get("avgDeathsPerGame", 0)))
+    assists = data.get("avgAssists", data.get("assists", data.get("avgAssistsPerGame", 0)))
+    if kda or kills or deaths:
+        if kda:
+            lines.append(f"KDA: {kda}")
+        lines.append(f"场均击杀: {kills}  |  场均死亡: {deaths}  |  场均助攻: {assists}")
+
+    # 经济/补刀
+    gpm = data.get("goldPerMin", data.get("gpm", data.get("avgGoldPerMin", 0)))
+    cspm = data.get("csPerMin", data.get("cspm", data.get("avgCsPerMin", 0)))
+    if gpm or cspm:
+        parts = []
+        if gpm:
+            parts.append(f"分均经济: {gpm}")
+        if cspm:
+            parts.append(f"分均补刀: {cspm}")
+        lines.append("  |  ".join(parts))
+
+    # 场均时长
+    avg_time = data.get("avgGameTime", data.get("avgGameDuration", data.get("avgDuration", "")))
+    if avg_time:
+        lines.append(f"场均时长: {avg_time}")
+
+    # 目标控制
+    barons = data.get("barons", data.get("avgBarons", data.get("totalBarons", 0)))
+    drakes = data.get("drakes", data.get("avgDrakes", data.get("dragons", data.get("totalDrakes", 0))))
+    towers = data.get("towers", data.get("avgTowers", data.get("totalTowers", 0)))
+    if barons or drakes or towers:
+        parts = []
+        if barons:
+            parts.append(f"大龙: {barons}")
+        if drakes:
+            parts.append(f"小龙: {drakes}")
+        if towers:
+            parts.append(f"防御塔: {towers}")
+        lines.append("  |  ".join(parts))
+
+    # 一血/一塔率
+    fb = data.get("firstBloodRate", data.get("firstBlood", data.get("fb", "")))
+    ft = data.get("firstTowerRate", data.get("firstTower", data.get("ft", "")))
+    if fb or ft:
+        parts = []
+        if fb:
+            parts.append(f"一血率: {fb}")
+        if ft:
+            parts.append(f"一塔率: {ft}")
+        lines.append("  |  ".join(parts))
+
+    return "\n".join(lines)
+
+
 # ═══════════════════════════════════════════════════
 #  锦标赛 / 英雄 / 排行榜 格式化
 # ═══════════════════════════════════════════════════

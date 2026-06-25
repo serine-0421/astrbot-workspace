@@ -47,6 +47,26 @@ _SCHEDULE_CACHE_TTL: float = 600.0
 _STANDINGS_CACHE_TTL: float = 900.0
 # 实时比赛数据变化快，缓存 2 分钟
 _LIVE_CACHE_TTL: float = 120.0
+# 静态数据几乎不变，缓存 1 小时
+_STATIC_CACHE_TTL: float = 3600.0
+# 战队/选手基本信息变化较慢，缓存 30 分钟
+_INFO_CACHE_TTL: float = 1800.0
+# 统计数据变化中等，缓存 15 分钟
+_STATS_CACHE_TTL: float = 900.0
+# 今日/本周赛程变化较快，缓存 5 分钟
+_SHORT_SCHEDULE_CACHE_TTL: float = 300.0
+# 热门趋势变化较快，缓存 10 分钟
+_TRENDING_CACHE_TTL: float = 600.0
+# 历史数据基本不变，缓存 2 小时
+_HISTORY_CACHE_TTL: float = 7200.0
+# 转会/记录/奖项变化较慢，缓存 1 小时
+_RECORDS_CACHE_TTL: float = 3600.0
+# 排行榜数据变化中等，缓存 15 分钟
+_LEADERBOARD_CACHE_TTL: float = 900.0
+# 搜索缓存 10 分钟
+_SEARCH_CACHE_TTL: float = 600.0
+# 聚合查询缓存 10 分钟
+_COMPOSITE_CACHE_TTL: float = 600.0
 
 
 def _cache_key(*args: str) -> str:
@@ -242,8 +262,14 @@ async def get_today_schedule(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("today", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_today_schedule
-    return await fetch_today_schedule(league=ln or "")
+    result = await fetch_today_schedule(league=ln or "")
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 async def get_week_schedule(league: str = "") -> JsonResult:
@@ -251,8 +277,14 @@ async def get_week_schedule(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("week", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_week_schedule
-    return await fetch_week_schedule(league=ln or "")
+    result = await fetch_week_schedule(league=ln or "")
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 async def get_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
@@ -260,8 +292,14 @@ async def get_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
     ln = normalize_league(league)
     if ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("upcoming", ln, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_upcoming_matches
-    return await fetch_upcoming_matches(league=ln, limit=limit)
+    result = await fetch_upcoming_matches(league=ln, limit=limit)
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 async def get_completed_matches(league: str, limit: int = 10) -> JsonResult:
@@ -269,8 +307,14 @@ async def get_completed_matches(league: str, limit: int = 10) -> JsonResult:
     ln = normalize_league(league)
     if ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("completed", ln, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_completed_matches
-    return await fetch_completed_matches(league=ln, limit=limit)
+    result = await fetch_completed_matches(league=ln, limit=limit)
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -279,8 +323,14 @@ async def get_completed_matches(league: str, limit: int = 10) -> JsonResult:
 
 async def get_all_leagues() -> JsonResult:
     """获取所有联赛列表。"""
+    cache_key = _cache_key("all_leagues")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_all_leagues
-    return await fetch_all_leagues()
+    result = await fetch_all_leagues()
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_league_details(league: str) -> JsonResult:
@@ -288,8 +338,14 @@ async def get_league_details(league: str) -> JsonResult:
     ln = normalize_league(league)
     if ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("league_detail", ln)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_league_details
-    return await fetch_league_details(slug=ln)
+    result = await fetch_league_details(slug=ln)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -301,44 +357,86 @@ async def get_all_teams(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("all_teams", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_all_teams
-    return await fetch_all_teams(league=ln or "")
+    result = await fetch_all_teams(league=ln or "")
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_team(team_id: str) -> JsonResult:
     """获取单个战队信息。"""
+    cache_key = _cache_key("team", team_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team
-    return await fetch_team(team_id=team_id)
+    result = await fetch_team(team_id=team_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_team_roster(team_id: str) -> JsonResult:
     """获取战队阵容。"""
+    cache_key = _cache_key("team_roster", team_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_roster
-    return await fetch_team_roster(team_id=team_id)
+    result = await fetch_team_roster(team_id=team_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_team_matches(team_id: str, limit: int = 10) -> JsonResult:
     """获取战队近期比赛。"""
+    cache_key = _cache_key("team_matches", team_id, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_matches
-    return await fetch_team_matches(team_id=team_id, limit=limit)
+    result = await fetch_team_matches(team_id=team_id, limit=limit)
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 async def get_team_stats(team_id: str, season: str = "current") -> JsonResult:
     """获取战队统计数据。"""
+    cache_key = _cache_key("team_stats", team_id, season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_stats
-    return await fetch_team_stats(team_id=team_id, season=season)
+    result = await fetch_team_stats(team_id=team_id, season=season)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_team_h2h(team_a: str, team_b: str) -> JsonResult:
     """获取两队交手记录。"""
+    cache_key = _cache_key("team_h2h", team_a, team_b)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_h2h
-    return await fetch_team_h2h(team_a=team_a, team_b=team_b)
+    result = await fetch_team_h2h(team_a=team_a, team_b=team_b)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_team_full_profile(team_id: str) -> JsonResult:
     """获取战队完整画像（信息+阵容+统计+近期比赛）。"""
+    cache_key = _cache_key("team_full", team_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_full_profile
-    return await fetch_team_full_profile(team_id=team_id)
+    result = await fetch_team_full_profile(team_id=team_id)
+    _cache_set(cache_key, result, _COMPOSITE_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -350,44 +448,86 @@ async def get_all_players(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("all_players", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_all_players
-    return await fetch_all_players(league=ln or "")
+    result = await fetch_all_players(league=ln or "")
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_player(player_id: str) -> JsonResult:
     """获取单个选手信息。"""
+    cache_key = _cache_key("player", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player
-    return await fetch_player(player_id=player_id)
+    result = await fetch_player(player_id=player_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_player_stats(player_id: str, season: str = "current") -> JsonResult:
     """获取选手统计数据。"""
+    cache_key = _cache_key("player_stats", player_id, season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_stats
-    return await fetch_player_stats(player_id=player_id, season=season)
+    result = await fetch_player_stats(player_id=player_id, season=season)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_player_career(player_id: str) -> JsonResult:
     """获取选手生涯数据。"""
+    cache_key = _cache_key("player_career", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_career
-    return await fetch_player_career(player_id=player_id)
+    result = await fetch_player_career(player_id=player_id)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_player_champions(player_id: str) -> JsonResult:
     """获取选手英雄池。"""
+    cache_key = _cache_key("player_champs", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_champions
-    return await fetch_player_champions(player_id=player_id)
+    result = await fetch_player_champions(player_id=player_id)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_player_matches(player_id: str, limit: int = 10) -> JsonResult:
     """获取选手近期比赛。"""
+    cache_key = _cache_key("player_matches", player_id, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_matches
-    return await fetch_player_matches(player_id=player_id, limit=limit)
+    result = await fetch_player_matches(player_id=player_id, limit=limit)
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
 
 
 async def get_player_full_profile(player_id: str) -> JsonResult:
     """获取选手完整画像（信息+统计+生涯+英雄池）。"""
+    cache_key = _cache_key("player_full", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_full_profile
-    return await fetch_player_full_profile(player_id=player_id)
+    result = await fetch_player_full_profile(player_id=player_id)
+    _cache_set(cache_key, result, _COMPOSITE_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -399,38 +539,74 @@ async def get_all_tournaments(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("all_tournaments", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_all_tournaments
-    return await fetch_all_tournaments(league=ln or "")
+    result = await fetch_all_tournaments(league=ln or "")
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_tournament(tournament_id: str) -> JsonResult:
     """获取锦标赛详情。"""
+    cache_key = _cache_key("tournament", tournament_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_tournament
-    return await fetch_tournament(tournament_id=tournament_id)
+    result = await fetch_tournament(tournament_id=tournament_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
 
 
 async def get_tournament_standings(tournament_id: str) -> JsonResult:
     """获取锦标赛积分榜。"""
+    cache_key = _cache_key("tournament_standings", tournament_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_tournament_standings
-    return await fetch_tournament_standings(tournament_id=tournament_id)
+    result = await fetch_tournament_standings(tournament_id=tournament_id)
+    _cache_set(cache_key, result, _STANDINGS_CACHE_TTL)
+    return result
 
 
 async def get_tournament_bracket(tournament_id: str) -> JsonResult:
     """获取锦标赛淘汰赛对阵。"""
+    cache_key = _cache_key("tournament_bracket", tournament_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_tournament_bracket
-    return await fetch_tournament_bracket(tournament_id=tournament_id)
+    result = await fetch_tournament_bracket(tournament_id=tournament_id)
+    _cache_set(cache_key, result, _STANDINGS_CACHE_TTL)
+    return result
 
 
 async def get_tournament_mvp(tournament_id: str) -> JsonResult:
     """获取锦标赛 MVP。"""
+    cache_key = _cache_key("tournament_mvp", tournament_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_tournament_mvp
-    return await fetch_tournament_mvp(tournament_id=tournament_id)
+    result = await fetch_tournament_mvp(tournament_id=tournament_id)
+    _cache_set(cache_key, result, _STANDINGS_CACHE_TTL)
+    return result
 
 
 async def get_tournament_full(tournament_id: str) -> JsonResult:
     """获取锦标赛全貌。"""
+    cache_key = _cache_key("tournament_full", tournament_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_tournament_full
-    return await fetch_tournament_full(tournament_id=tournament_id)
+    result = await fetch_tournament_full(tournament_id=tournament_id)
+    _cache_set(cache_key, result, _COMPOSITE_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -442,8 +618,14 @@ async def get_champion_stats(league: str = "", season: str = "current") -> JsonR
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("champion_stats", ln or "", season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_champion_stats
-    return await fetch_champion_stats(league=ln or "", season=season)
+    result = await fetch_champion_stats(league=ln or "", season=season)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 async def get_champion_presence(league: str = "", season: str = "current") -> JsonResult:
@@ -451,8 +633,14 @@ async def get_champion_presence(league: str = "", season: str = "current") -> Js
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("champion_presence", ln or "", season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_champion_presence
-    return await fetch_champion_presence(league=ln or "", season=season)
+    result = await fetch_champion_presence(league=ln or "", season=season)
+    _cache_set(cache_key, result, _STATS_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -461,20 +649,38 @@ async def get_champion_presence(league: str = "", season: str = "current") -> Js
 
 async def get_gpr() -> JsonResult:
     """获取全球战力排名。"""
+    cache_key = _cache_key("gpr")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_global_power_rankings
-    return await fetch_global_power_rankings()
+    result = await fetch_global_power_rankings()
+    _cache_set(cache_key, result, _LEADERBOARD_CACHE_TTL)
+    return result
 
 
 async def get_player_rankings(metric: str = "kda", limit: int = 20) -> JsonResult:
     """获取选手排名。metric: kda|kills|deaths|assists|cs"""
+    cache_key = _cache_key("player_rankings", metric, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_player_rankings
-    return await fetch_player_rankings(metric=metric, limit=limit)
+    result = await fetch_player_rankings(metric=metric, limit=limit)
+    _cache_set(cache_key, result, _LEADERBOARD_CACHE_TTL)
+    return result
 
 
 async def get_team_rankings(metric: str = "wins", limit: int = 20) -> JsonResult:
     """获取战队排名。"""
+    cache_key = _cache_key("team_rankings", metric, str(limit))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_team_rankings
-    return await fetch_team_rankings(metric=metric, limit=limit)
+    result = await fetch_team_rankings(metric=metric, limit=limit)
+    _cache_set(cache_key, result, _LEADERBOARD_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -497,6 +703,10 @@ async def get_leaderboard(metric: str, league: str = "", season: str = "current"
     if league and not ln:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
     m = metric.strip().lower()
+    cache_key = _cache_key("leaderboard", m, ln, season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     func_map = {
         "kda": fetch_leaderboards_kda,
         "kills": fetch_leaderboards_kills,
@@ -510,7 +720,9 @@ async def get_leaderboard(metric: str, league: str = "", season: str = "current"
     fn = func_map.get(m)
     if fn is None:
         return Failure(error=f"不支持的数据项: {metric}，可用: {', '.join(func_map)}")
-    return await fn(league=ln, season=season)
+    result = await fn(league=ln, season=season)
+    _cache_set(cache_key, result, _LEADERBOARD_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -519,20 +731,38 @@ async def get_leaderboard(metric: str, league: str = "", season: str = "current"
 
 async def search_teams(query: str) -> JsonResult:
     """搜索战队。"""
+    cache_key = _cache_key("search_teams", query)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import search_teams
-    return await search_teams(query=query)
+    result = await search_teams(query=query)
+    _cache_set(cache_key, result, _SEARCH_CACHE_TTL)
+    return result
 
 
 async def search_players(query: str) -> JsonResult:
     """搜索选手。"""
+    cache_key = _cache_key("search_players", query)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import search_players
-    return await search_players(query=query)
+    result = await search_players(query=query)
+    _cache_set(cache_key, result, _SEARCH_CACHE_TTL)
+    return result
 
 
 async def search_tournaments(query: str) -> JsonResult:
     """搜索锦标赛。"""
+    cache_key = _cache_key("search_tournaments", query)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import search_tournaments
-    return await search_tournaments(query=query)
+    result = await search_tournaments(query=query)
+    _cache_set(cache_key, result, _SEARCH_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -541,26 +771,50 @@ async def search_tournaments(query: str) -> JsonResult:
 
 async def get_trending() -> JsonResult:
     """获取热门趋势。"""
+    cache_key = _cache_key("trending")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_trending
-    return await fetch_trending()
+    result = await fetch_trending()
+    _cache_set(cache_key, result, _TRENDING_CACHE_TTL)
+    return result
 
 
 async def get_trending_players() -> JsonResult:
     """获取热门选手。"""
+    cache_key = _cache_key("trending_players")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_trending_players
-    return await fetch_trending_players()
+    result = await fetch_trending_players()
+    _cache_set(cache_key, result, _TRENDING_CACHE_TTL)
+    return result
 
 
 async def get_trending_teams() -> JsonResult:
     """获取热门战队。"""
+    cache_key = _cache_key("trending_teams")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_trending_teams
-    return await fetch_trending_teams()
+    result = await fetch_trending_teams()
+    _cache_set(cache_key, result, _TRENDING_CACHE_TTL)
+    return result
 
 
 async def get_trending_champions() -> JsonResult:
     """获取热门英雄。"""
+    cache_key = _cache_key("trending_champions")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_trending_champions
-    return await fetch_trending_champions()
+    result = await fetch_trending_champions()
+    _cache_set(cache_key, result, _TRENDING_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -569,14 +823,26 @@ async def get_trending_champions() -> JsonResult:
 
 async def get_worlds_history() -> JsonResult:
     """获取世界赛历史。"""
+    cache_key = _cache_key("worlds_history")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_worlds_history
-    return await fetch_worlds_history()
+    result = await fetch_worlds_history()
+    _cache_set(cache_key, result, _HISTORY_CACHE_TTL)
+    return result
 
 
 async def get_msi_history() -> JsonResult:
     """获取 MSI 历史。"""
+    cache_key = _cache_key("msi_history")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_msi_history
-    return await fetch_msi_history()
+    result = await fetch_msi_history()
+    _cache_set(cache_key, result, _HISTORY_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -588,8 +854,14 @@ async def get_transfers(league: str = "", season: str = "current") -> JsonResult
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("transfers", ln or "", season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_transfers
-    return await fetch_transfers(league=ln or "", season=season)
+    result = await fetch_transfers(league=ln or "", season=season)
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
 
 
 async def get_records(league: str = "") -> JsonResult:
@@ -597,8 +869,14 @@ async def get_records(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("records", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_records
-    return await fetch_records(league=ln or "")
+    result = await fetch_records(league=ln or "")
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
 
 
 async def get_milestones(league: str = "") -> JsonResult:
@@ -606,8 +884,14 @@ async def get_milestones(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("milestones", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_milestones
-    return await fetch_milestones(league=ln or "")
+    result = await fetch_milestones(league=ln or "")
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
 
 
 async def get_awards(league: str = "") -> JsonResult:
@@ -615,8 +899,14 @@ async def get_awards(league: str = "") -> JsonResult:
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("awards", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_awards
-    return await fetch_awards(league=ln or "")
+    result = await fetch_awards(league=ln or "")
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
 
 
 async def get_mvp_awards(league: str = "", season: str = "current") -> JsonResult:
@@ -624,8 +914,14 @@ async def get_mvp_awards(league: str = "", season: str = "current") -> JsonResul
     ln = normalize_league(league) if league else None
     if league and ln is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("mvp_awards", ln or "", season)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_mvp_awards
-    return await fetch_mvp_awards(league=ln or "", season=season)
+    result = await fetch_mvp_awards(league=ln or "", season=season)
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
@@ -634,20 +930,38 @@ async def get_mvp_awards(league: str = "", season: str = "current") -> JsonResul
 
 async def get_static_champions() -> JsonResult:
     """获取英雄静态数据。"""
+    cache_key = _cache_key("static_champions")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_static_champions
-    return await fetch_static_champions()
+    result = await fetch_static_champions()
+    _cache_set(cache_key, result, _STATIC_CACHE_TTL)
+    return result
 
 
 async def get_static_items() -> JsonResult:
     """获取装备静态数据。"""
+    cache_key = _cache_key("static_items")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_static_items
-    return await fetch_static_items()
+    result = await fetch_static_items()
+    _cache_set(cache_key, result, _STATIC_CACHE_TTL)
+    return result
 
 
 async def get_static_patches() -> JsonResult:
     """获取版本列表。"""
+    cache_key = _cache_key("static_patches")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from .lolesports import fetch_static_patches
-    return await fetch_static_patches()
+    result = await fetch_static_patches()
+    _cache_set(cache_key, result, _STATIC_CACHE_TTL)
+    return result
 
 
 # ═══════════════════════════════════════════════════
