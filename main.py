@@ -371,17 +371,19 @@ class LoLNotifierPlugin(Star):
         # 优先走 detail 路径（包含 games 数据）
         detail_result = await api.get_match_detail(league, stage, round_arg)
         if detail_result.ok and detail_result.value:
-            async for message in self._render_query_result(
-                event,
-                detail_result,
-                has_payload=lambda value: bool(value.games),
-                render_text=lambda value: fmt.format_match_detail(value),
-                render_image=lambda value: img.render_match_detail(value),
-                empty_text="⏳ 比赛结果暂未公布，请比赛结束后再试。",
-                error_prefix="/lol result error",
-            ):
-                yield message
-            return
+            if detail_result.value.games:
+                async for message in self._render_query_result(
+                    event,
+                    detail_result,
+                    has_payload=lambda value: bool(value.games),
+                    render_text=lambda value: fmt.format_match_detail(value),
+                    render_image=lambda value: img.render_match_detail(value),
+                    empty_text="⏳ 比赛结果暂未公布，请比赛结束后再试。",
+                    error_prefix="/lol result error",
+                ):
+                    yield message
+                return
+            # 有 match 但没有 games → 回退显示基本信息
         # 回退到 schedule 路径（只显示基本信息）
         result = await api.get_match_result(league, stage, round_arg)
         async for message in self._render_query_result(
@@ -442,21 +444,23 @@ class LoLNotifierPlugin(Star):
         stage: str = "regular",
         round_num: str = "last",
     ):
-        """查看比赛详细信息，可指定场次 round"""
+        """查看比赛详细信息，可指定场次 round 或直接 match_id"""
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
         result = await api.get_match_detail(league, stage, round_arg)
-        if result.ok and result.value and result.value.games:
-            async for message in self._render_query_result(
-                event,
-                result,
-                has_payload=lambda value: bool(value.games),
-                render_text=lambda value: fmt.format_match_detail(value),
-                render_image=lambda value: img.render_match_detail(value),
-                empty_text="⏳ 比赛详细信息暂未公布，请稍后再试。",
-                error_prefix="/lol detail error",
-            ):
-                yield message
-            return
+        if result.ok and result.value:
+            if result.value.games:
+                async for message in self._render_query_result(
+                    event,
+                    result,
+                    has_payload=lambda value: bool(value.games),
+                    render_text=lambda value: fmt.format_match_detail(value),
+                    render_image=lambda value: img.render_match_detail(value),
+                    empty_text="⏳ 比赛详细信息暂未公布，请稍后再试。",
+                    error_prefix="/lol detail error",
+                ):
+                    yield message
+                return
+            # 有 match 但没有 games → 回退显示基本信息
         # 回退：显示基本信息
         basic = await api.get_match_result(league, stage, round_arg)
         if basic.ok and basic.value:
@@ -602,10 +606,11 @@ class LoLNotifierPlugin(Star):
         """今日赛程。"""
         result = await api.get_today_schedule(league)
         match result:
-            case Success(value=data):
-                # data 现在是 LeagueMatch 列表，直接格式化
+            case Success(value=data) if data:
                 text = fmt.format_schedule(data)
                 yield event.plain_result(text)
+            case Success():
+                yield event.plain_result("📅 今天暂无比赛。")
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
@@ -614,9 +619,11 @@ class LoLNotifierPlugin(Star):
         """本周赛程。"""
         result = await api.get_week_schedule(league)
         match result:
-            case Success(value=data):
+            case Success(value=data) if data:
                 text = fmt.format_schedule(data)
                 yield event.plain_result(text)
+            case Success():
+                yield event.plain_result("📅 本周暂无比赛。")
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 

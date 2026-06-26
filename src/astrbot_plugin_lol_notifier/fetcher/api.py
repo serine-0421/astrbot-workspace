@@ -263,6 +263,14 @@ async def get_match_detail(
 
     from .lolesports import fetch_match_detail, fetch_schedule, fetch_past_schedule
 
+    # round_number 是大数字 ID 时 → 直接查 match detail（跳过赛程查找）
+    rn_str = str(round_number)
+    if rn_str.isdigit() and len(rn_str) >= 12:
+        detail = await fetch_match_detail(rn_str)
+        if detail is not None:
+            return Success(value=detail)
+        return Failure(error=f"未找到比赛 {rn_str} 的详细信息。")
+
     sched = await fetch_schedule(league=league_n)
     if not sched.ok:
         return sched  # 传递原始错误

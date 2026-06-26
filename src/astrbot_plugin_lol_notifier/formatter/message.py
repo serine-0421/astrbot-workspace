@@ -10,7 +10,7 @@ from ..utils import replace_side_mentions
 
 def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     if not matches:
-        return "📅 暂无可用赛程数据，请先接入赛事数据源。"
+        return "📅 暂无比赛安排。"
     # 按日期降序排列（最近的在前面）
     def _sort_key(m: LeagueMatch):
         d = (m.start_date or "") + (m.start_time or "")
