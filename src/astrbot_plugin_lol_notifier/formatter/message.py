@@ -11,11 +11,17 @@ from ..utils import replace_side_mentions
 def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     if not matches:
         return "📅 暂无可用赛程数据，请先接入赛事数据源。"
-    lines = ["📅 LoL 近期赛程\n"]
-    for match in matches[:limit]:
+    # 按日期降序排列（最近的在前面）
+    def _sort_key(m: LeagueMatch):
+        d = (m.start_date or "") + (m.start_time or "")
+        return d if d else "0000"
+    sorted_matches = sorted(matches, key=_sort_key, reverse=True)
+    lines = ["📅 LoL 近期赛程（最近优先）\n"]
+    for match in sorted_matches[:limit]:
         teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
+        round_info = f"第{match.round}场 " if match.round else ""
         lines.append(
-            f"[{match.league.upper()} · {match.stage}] 第{match.round}场 {teams}\n"
+            f"[{match.league.upper()} · {match.stage}] {round_info}{teams}\n"
             f"  时间: {match.start_date} {match.start_time}\n"
             f"  场馆: {match.arena or '未知'}"
         )
@@ -73,6 +79,24 @@ def format_match_detail(detail: MatchDetail) -> str:
     for game in detail.games:
         lines.append(_format_game(game))
     return "\n".join(line for line in lines if line is not None).rstrip()
+
+
+def format_match_basic(match: LeagueMatch) -> str:
+    """格式化比赛基本信息（无对局详情时的回退）。"""
+    if match is None:
+        return "⏳ 比赛结果暂未公布，请稍后再试。"
+    teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
+    status_icon = {"completed": "✅", "finished": "✅", "in_progress": "🔴", "unstarted": "⏳"}.get(match.status, "📅")
+    lines = [
+        f"{status_icon} 比赛结果 — {match.league.upper()} {match.stage}",
+        teams,
+        f"时间: {match.start_date} {match.start_time}",
+    ]
+    if match.arena:
+        lines.append(f"场馆: {match.arena}")
+    if match.match_id:
+        lines.append(f"\n💡 使用 /lol detail {match.league} {match.round or match.match_id} 查看详细对局数据")
+    return "\n".join(lines)
 
 
 def format_standings(standings: list[StandingEntry]) -> str:
@@ -321,7 +345,31 @@ def format_team_info(data: dict) -> str:
     return "\n".join(lines)
 
 
-def format_team_roster(data: dict) -> str:
+def format_team_full_profile(data: dict) -> str:
+    """格式化战队完整画像（信息+阵容+近期比赛+统计）。"""
+    parts = []
+    
+    # 基本信息
+    info = data.get("info") or data
+    if isinstance(info, dict):
+        parts.append(format_team_info(info))
+    
+    # 阵容
+    roster = data.get("roster")
+    if roster and isinstance(roster, dict):
+        parts.append(format_team_roster(roster))
+    
+    # 近期比赛
+    matches = data.get("matches")
+    if matches:
+        parts.append(format_team_matches(matches))
+    
+    # 统计数据
+    stats = data.get("stats")
+    if stats and isinstance(stats, dict):
+        parts.append(format_team_stats(stats))
+    
+    return "\n\n".join(parts) if parts else "🏢 暂无战队数据。"
     """格式化战队阵容。"""
     team_name = data.get("team", {}).get("name", "未知战队") if isinstance(data.get("team"), dict) else data.get("name", "未知战队")
     players = data.get("players", data.get("roster", data.get("data", [])))
@@ -365,7 +413,15 @@ def format_team_roster(data: dict) -> str:
 
 def format_team_matches(data: dict) -> str:
     """格式化战队近期比赛。"""
-    matches = data.get("matches", data.get("events", []))
+    if not isinstance(data, dict):
+        if isinstance(data, list):
+            matches = data
+        else:
+            return "📅 暂无近期比赛数据。"
+    else:
+        matches = data.get("matches") or data.get("events") or data.get("data") or []
+        if isinstance(matches, dict):
+            matches = matches.get("matches") or matches.get("events") or []
     if not matches:
         return "📅 暂无近期比赛数据。"
     lines = [f"📅 近期比赛 ({len(matches)} 场)\n"]
