@@ -370,6 +370,9 @@ def format_team_full_profile(data: dict) -> str:
         parts.append(format_team_stats(stats))
     
     return "\n\n".join(parts) if parts else "🏢 暂无战队数据。"
+
+
+def format_team_roster(data: dict) -> str:
     """格式化战队阵容。"""
     team_name = data.get("team", {}).get("name", "未知战队") if isinstance(data.get("team"), dict) else data.get("name", "未知战队")
     players = data.get("players", data.get("roster", data.get("data", [])))

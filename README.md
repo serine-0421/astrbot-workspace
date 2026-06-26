@@ -40,8 +40,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `search <关键词>` | 搜索战队（支持直接名称匹配） | `/lol team search BLG` |
-| `info <战队名>` | 战队完整信息（含阵容+近期比赛+统计） | `/lol team info BLG` |
+| `info <战队名>` | 战队完整信息（自动搜索匹配，含阵容+比赛+统计） | `/lol team info BLG` |
 | `h2h <战队A> <战队B>` | 两队历史交手记录 | `/lol team h2h BLG TES` |
 
 ### 🔹 选手 — `/lol player`

@@ -83,8 +83,7 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
       本周赛程
 
 ━━━ 战队 ━━━
-  /lol team search <query>        搜索战队（支持直接匹配）
-  /lol team info <name>           战队完整信息（含阵容+比赛+统计）
+  /lol team info <name>           战队完整信息（自动搜索匹配）
   /lol team h2h <team_a> <team_b> 两队交手记录
 
 ━━━ 选手 ━━━
@@ -536,57 +535,38 @@ class LoLNotifierPlugin(Star):
     def lol_team(self) -> None:
         """战队查询"""
 
-    @lol_team.command("search")
-    async def lol_team_search(self, event: AstrMessageEvent, query: str = ""):
-        """搜索战队（也可直接用作 team info 输入）。"""
-        if not query.strip():
-            yield event.plain_result("请提供搜索关键词。如: /lol team search T1")
-            return
-        result = await api.search_teams(query)
-        match result:
-            case Success(value=data):
-                text = fmt.format_search_teams(data)
-                # 搜索不到时，尝试直接以 query 作为战队 ID 查询
-                if "未找到" in text:
-                    direct = await api.get_team(query.strip())
-                    if direct.ok and direct.value:
-                        yield event.plain_result(f"🔍 直接匹配到战队:\n\n{fmt.format_team_info(direct.value)}\n\n💡 使用 /lol team info {query.strip()} 查看完整信息")
-                        return
-                yield event.plain_result(text)
-            case Failure(error=err):
-                # API 出错也尝试直接查询
-                direct = await api.get_team(query.strip())
-                if direct.ok and direct.value:
-                    yield event.plain_result(f"🔍 直接匹配到战队:\n\n{fmt.format_team_info(direct.value)}\n\n💡 使用 /lol team info {query.strip()} 查看完整信息")
-                    return
-                yield event.plain_result(f"❌ {err}")
-
     @lol_team.command("info")
     async def lol_team_info(self, event: AstrMessageEvent, team_id: str = ""):
-        """战队完整信息（整合信息+阵容+近期比赛+统计）。"""
+        """战队完整信息（整合信息+阵容+近期比赛+统计，支持搜索匹配）。"""
         if not team_id.strip():
             yield event.plain_result("请提供战队名称。如: /lol team info BLG")
             return
-        # 尝试获取完整画像
-        result = await api.get_team_full_profile(team_id.strip())
+        name = team_id.strip()
+        # 1) 尝试获取完整画像
+        result = await api.get_team_full_profile(name)
         if result.ok and result.value:
             yield event.plain_result(fmt.format_team_full_profile(result.value))
             return
-        # 回退：逐个获取基本信息
-        team_result = await api.get_team(team_id.strip())
-        if not team_result.ok:
-            yield event.plain_result(f"❌ 未找到战队 '{team_id}'，可尝试 /lol team search <关键词>")
+        # 2) 回退：直接按 ID 查询基本信息
+        team_result = await api.get_team(name)
+        if team_result.ok and team_result.value:
+            parts = [fmt.format_team_info(team_result.value)]
+            roster = await api.get_team_roster(name)
+            if roster.ok and roster.value:
+                parts.append(fmt.format_team_roster(roster.value))
+            matches = await api.get_team_matches(name)
+            if matches.ok and matches.value:
+                parts.append(fmt.format_team_matches(matches.value))
+            yield event.plain_result("\n\n".join(parts))
             return
-        parts = [fmt.format_team_info(team_result.value)]
-        # 阵容
-        roster = await api.get_team_roster(team_id.strip())
-        if roster.ok and roster.value:
-            parts.append(fmt.format_team_roster(roster.value))
-        # 近期比赛
-        matches = await api.get_team_matches(team_id.strip())
-        if matches.ok and matches.value:
-            parts.append(fmt.format_team_matches(matches.value))
-        yield event.plain_result("\n\n".join(parts))
+        # 3) 都失败则搜索
+        search_result = await api.search_teams(name)
+        if search_result.ok and search_result.value:
+            text = fmt.format_search_teams(search_result.value)
+            if "未找到" not in text:
+                yield event.plain_result(f"🔍 未直接匹配到 '{name}'，搜索结果:\n\n{text}\n\n💡 请使用搜索结果中的战队名重新查询")
+                return
+        yield event.plain_result(f"❌ 未找到战队 '{name}'")
 
     @lol_team.command("roster")
     async def lol_team_roster(self, event: AstrMessageEvent, team_id: str = ""):
