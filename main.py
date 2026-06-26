@@ -349,12 +349,29 @@ class LoLNotifierPlugin(Star):
         """查看单局 BP，可指定场次 round"""
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
         result = await api.get_match_bp(league, stage, round_arg)
+        if result.ok and result.value and result.value.games:
+            async for message in self._render_query_result(
+                event,
+                result,
+                has_payload=lambda value: bool(value.games),
+                render_text=lambda value: fmt.format_match_bp(value),
+                render_image=lambda value: img.render_match_bp(value),
+                empty_text="⏳ BP 数据暂未公布，请稍后再试。",
+                error_prefix="/lol bp error",
+            ):
+                yield message
+            return
+        # 回退：显示基本信息
+        basic = await api.get_match_result(league, stage, round_arg)
+        if basic.ok and basic.value:
+            yield event.plain_result(fmt.format_match_basic(basic.value))
+            return
         async for message in self._render_query_result(
             event,
-            result,
-            has_payload=lambda value: bool(value.games),
-            render_text=lambda value: fmt.format_match_bp(value),
-            render_image=lambda value: img.render_match_bp(value),
+            Success(value=None),
+            has_payload=lambda value: False,
+            render_text=lambda value: "",
+            render_image=lambda value: "",
             empty_text="⏳ BP 数据暂未公布，请稍后再试。",
             error_prefix="/lol bp error",
         ):
@@ -371,12 +388,29 @@ class LoLNotifierPlugin(Star):
         """查看比赛详细信息，可指定场次 round"""
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
         result = await api.get_match_detail(league, stage, round_arg)
+        if result.ok and result.value and result.value.games:
+            async for message in self._render_query_result(
+                event,
+                result,
+                has_payload=lambda value: bool(value.games),
+                render_text=lambda value: fmt.format_match_detail(value),
+                render_image=lambda value: img.render_match_detail(value),
+                empty_text="⏳ 比赛详细信息暂未公布，请稍后再试。",
+                error_prefix="/lol detail error",
+            ):
+                yield message
+            return
+        # 回退：显示基本信息
+        basic = await api.get_match_result(league, stage, round_arg)
+        if basic.ok and basic.value:
+            yield event.plain_result(fmt.format_match_basic(basic.value))
+            return
         async for message in self._render_query_result(
             event,
-            result,
-            has_payload=lambda value: bool(value.games),
-            render_text=lambda value: fmt.format_match_detail(value),
-            render_image=lambda value: img.render_match_detail(value),
+            Success(value=None),
+            has_payload=lambda value: False,
+            render_text=lambda value: "",
+            render_image=lambda value: "",
             empty_text="⏳ 比赛详细信息暂未公布，请稍后再试。",
             error_prefix="/lol detail error",
         ):
@@ -512,7 +546,9 @@ class LoLNotifierPlugin(Star):
         result = await api.get_today_schedule(league)
         match result:
             case Success(value=data):
-                yield event.plain_result(fmt.format_schedule(_parse_schedule_raw(data)))
+                # data 现在是 LeagueMatch 列表，直接格式化
+                text = fmt.format_schedule(data)
+                yield event.plain_result(text)
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
@@ -522,7 +558,8 @@ class LoLNotifierPlugin(Star):
         result = await api.get_week_schedule(league)
         match result:
             case Success(value=data):
-                yield event.plain_result(fmt.format_schedule(_parse_schedule_raw(data)))
+                text = fmt.format_schedule(data)
+                yield event.plain_result(text)
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
@@ -559,7 +596,7 @@ class LoLNotifierPlugin(Star):
             yield event.plain_result("\n\n".join(parts))
             return
         # 3) 都失败则搜索
-        search_result = await api.search_teams(name)
+        search_result = await api.search(name, "teams")
         if search_result.ok and search_result.value:
             text = fmt.format_search_teams(search_result.value)
             if "未找到" not in text:
@@ -640,7 +677,7 @@ class LoLNotifierPlugin(Star):
             yield event.plain_result(fmt.format_player_info(result.value))
             return
         # 2) 搜索回退
-        search_result = await api.search_players(name)
+        search_result = await api.search(name, "players")
         if search_result.ok and search_result.value:
             text = fmt.format_search_players(search_result.value)
             if "未找到" not in text:
@@ -761,10 +798,10 @@ class LoLNotifierPlugin(Star):
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}\n💡 英雄统计功能依赖 citoapi 支持，可能当前端点不可用")
 
-    @lol_champion.command("presence")
-    async def lol_champion_presence(self, event: AstrMessageEvent, league: str = ""):
-        """英雄 Pick/Ban 率。"""
-        result = await api.get_champion_presence(league)
+    @lol_champion.command("meta")
+    async def lol_champion_meta(self, event: AstrMessageEvent, league: str = ""):
+        """英雄 Meta 等级。"""
+        result = await api.get_champion_meta(league)
         match result:
             case Success(value=data):
                 yield event.plain_result(fmt.format_champion_presence(data))
@@ -783,12 +820,12 @@ class LoLNotifierPlugin(Star):
             case Success(value=data):
                 yield event.plain_result(fmt.format_gpr_rankings(data))
             case Failure(error=err):
-                yield event.plain_result(f"❌ {err}\n💡 GPR 全球战力排名依赖 citoapi /lol/rankings/gpr 端点，可能暂不可用")
+                yield event.plain_result(f"❌ {err}\n💡 GPR 全球战力排名依赖 citoapi /lol/rankings 端点，可能暂不可用")
 
     @lol_ranking.command("players")
     async def lol_ranking_players(self, event: AstrMessageEvent, metric: str = "kda"):
-        """选手排名。metric: kda|kills|deaths|assists|cs"""
-        valid = {"kda", "kills", "deaths", "assists", "cs"}
+        """选手排名。metric: kda"""
+        valid = {"kda"}
         if metric.strip().lower() not in valid:
             yield event.plain_result(f"不支持的指标: {metric}，可用: {', '.join(valid)}")
             return
@@ -806,8 +843,8 @@ class LoLNotifierPlugin(Star):
         metric: str = "kda",
         league: str = "",
     ):
-        """数据排行榜。metric: kda|kills|deaths|assists|cs|gold|vision|damage"""
-        valid = {"kda", "kills", "deaths", "assists", "cs", "gold", "vision", "damage"}
+        """数据排行榜。metric: kda|earnings|winrate|firstblood|championships"""
+        valid = {"kda", "earnings", "winrate", "firstblood", "championships"}
         m = metric.strip().lower()
         if m not in valid:
             yield event.plain_result(f"不支持的指标: {metric}，可用: {', '.join(valid)}")
@@ -904,6 +941,8 @@ def _parse_schedule_raw(data: dict) -> list:
 
     results = []
     for ev in events:
+        if not isinstance(ev, dict):
+            continue
         m = ev.get("match", ev)
         teams_raw = m.get("teams", ev.get("teams", []))
         teams = [t.get("name", t.get("code", "?")) for t in teams_raw] if isinstance(teams_raw, list) else []

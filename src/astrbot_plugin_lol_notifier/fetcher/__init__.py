@@ -1,8 +1,8 @@
 """LoL plugin fetcher package — 数据抓取层.
 
 三大部分:
-- lolesports.py: citoapi HTTP 请求（103 个 fetch 函数, 21 个类别）
-- api.py:       数据访问封装层（41 个 wrapper，league 校验 + Result 封装）
+- lolesports.py: citoapi HTTP 请求（100+ fetch 函数, 18 个类别）
+- api.py:       数据访问封装层（cache + league 校验 + Result 封装）
 - bilibili / bilibili_dynamic / weibo: 第三方平台数据抓取
 """
 
@@ -13,8 +13,7 @@ from .api import (
     get_all_players,
     get_all_teams,
     get_all_tournaments,
-    get_awards,
-    get_champion_presence,
+    get_champion_meta,
     get_champion_stats,
     get_completed_matches,
     get_gpr,
@@ -23,9 +22,7 @@ from .api import (
     get_match_bp,
     get_match_detail,
     get_match_result,
-    get_milestones,
     get_msi_history,
-    get_mvp_awards,
     get_player,
     get_player_career,
     get_player_champions,
@@ -54,15 +51,10 @@ from .api import (
     get_tournament_standings,
     get_transfers,
     get_trending,
-    get_trending_champions,
-    get_trending_players,
-    get_trending_teams,
     get_upcoming_matches,
     get_week_schedule,
     get_worlds_history,
-    search_players,
-    search_teams,
-    search_tournaments,
+    search,
 )
 from .bilibili import (
     fetch_bilibili_comments,
@@ -80,7 +72,7 @@ from .lolesports import (
 from .weibo import fetch_weibo_announcements, fetch_weibo_by_keyword, fetch_weibo_posters
 
 __all__ = [
-    # ==================== api.py 封装层 (41) ====================
+    # ==================== api.py 封装层 ====================
     "close_session",
     "get_schedule",
     "get_today_schedule",
@@ -119,7 +111,7 @@ __all__ = [
     "get_tournament_full",
     # Champions
     "get_champion_stats",
-    "get_champion_presence",
+    "get_champion_meta",
     # Rankings
     "get_gpr",
     "get_player_rankings",
@@ -127,24 +119,16 @@ __all__ = [
     # Leaderboards
     "get_leaderboard",
     # Search
-    "search_teams",
-    "search_players",
-    "search_tournaments",
+    "search",
     # Trending
     "get_trending",
-    "get_trending_players",
-    "get_trending_teams",
-    "get_trending_champions",
     # History
     "get_worlds_history",
     "get_msi_history",
     # Transfers
     "get_transfers",
-    # Records & Awards
+    # Records
     "get_records",
-    "get_milestones",
-    "get_awards",
-    "get_mvp_awards",
     # Static Data
     "get_static_champions",
     "get_static_items",

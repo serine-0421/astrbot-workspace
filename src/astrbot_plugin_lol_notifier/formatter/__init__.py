@@ -27,6 +27,7 @@ from .message import (
     format_live_game_frame,
     format_live_list,
     format_live_match,
+    format_match_basic,
     format_match_bp,
     format_match_detail,
     format_match_result,
@@ -41,6 +42,7 @@ from .message import (
     format_search_players,
     format_search_teams,
     format_standings,
+    format_team_full_profile,
     format_team_info,
     format_team_matches,
     format_team_roster,
@@ -57,6 +59,7 @@ __all__ = [
     # ==================== 消息格式化 (36) ====================
     # 核心
     "format_schedule",
+    "format_match_basic",
     "format_match_result",
     "format_match_bp",
     "format_match_detail",
@@ -71,6 +74,7 @@ __all__ = [
     "format_post_match_summary",
     "format_elimination_update",
     # 战队 & 选手
+    "format_team_full_profile",
     "format_team_info",
     "format_team_roster",
     "format_team_matches",

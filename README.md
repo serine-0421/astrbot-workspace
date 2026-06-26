@@ -65,7 +65,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
 | `/lol champion stats [赛区]` | 英雄胜率/登场率/禁用率统计 (⚠️) | `/lol champion stats lck` |
-| `/lol champion presence [赛区]` | 英雄 Pick / Ban 率排行 | `/lol champion presence lpl` |
+| `/lol champion meta [赛区]` | 当前版本 Meta 英雄等级排行 | `/lol champion meta lpl` |
 
 ### 🔹 排名 & 排行榜
 
@@ -75,9 +75,9 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol ranking players <指标>` | 选手数据排名 | `/lol ranking players kda` |
 | `/lol leaderboard <指标> [赛区]` | 赛区内数据排行榜 | `/lol leaderboard kda lck` |
 
-**排行榜指标：** `kda` `kills` `deaths` `assists` `cs` `gold` `vision` `damage`
+**排行榜指标：** `kda` `earnings` `winrate` `firstblood` `championships`
 
-**选手排名指标：** `kda` `kills` `deaths` `assists` `cs`
+**选手排名指标：** `kda`
 
 ### 🔹 其他查询
 

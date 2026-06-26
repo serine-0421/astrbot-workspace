@@ -445,13 +445,33 @@ def format_team_matches(data: dict) -> str:
 
 def format_player_info(data: dict) -> str:
     """格式化单个选手信息。"""
-    name = data.get("name", data.get("handle", "未知选手"))
-    team = data.get("team", {})
+    # 解除可能的 data 包装
+    inner = data.get("data", data)
+    if not isinstance(inner, dict):
+        inner = data
+    # 多方尝试提取名字
+    name = (
+        inner.get("name")
+        or inner.get("handle")
+        or inner.get("summonerName")
+        or inner.get("summoner_name")
+        or inner.get("ign")
+        or inner.get("nickname")
+        or inner.get("playerName")
+        or inner.get("player_name")
+        or (inner.get("player", {}) or {}).get("name")
+        or "未知选手"
+    )
+    team = inner.get("team", data.get("team", {}))
     if isinstance(team, dict):
         team = team.get("name", team.get("code", ""))
-    role = data.get("role", data.get("position", ""))
-    nationality = data.get("nationality", data.get("country", ""))
-    image = data.get("image", data.get("photoUrl", ""))
+    elif isinstance(team, str):
+        team = team
+    else:
+        team = ""
+    role = inner.get("role", inner.get("position", ""))
+    nationality = inner.get("nationality", inner.get("country", inner.get("region", "")))
+    image = inner.get("image", inner.get("photoUrl", ""))
     lines = [f"👤 {name}"]
     if team:
         lines.append(f"战队: {team}")
@@ -466,14 +486,28 @@ def format_player_info(data: dict) -> str:
 
 def format_player_stats(data: dict) -> str:
     """格式化选手统计数据。"""
-    name = data.get("name", data.get("player", {}).get("name", "未知选手") if isinstance(data.get("player"), dict) else "未知选手")
-    kda = data.get("kda", "")
-    kills = data.get("kills", data.get("avgKills", 0))
-    deaths = data.get("deaths", data.get("avgDeaths", 0))
-    assists = data.get("assists", data.get("avgAssists", 0))
-    cs = data.get("cs", data.get("csPerMin", data.get("cspm", 0)))
-    games = data.get("gamesPlayed", data.get("games", 0))
-    kp = data.get("killParticipation", data.get("kp", ""))
+    inner = data.get("data", data)
+    if not isinstance(inner, dict):
+        inner = data
+    # 多方尝试提取名字
+    name = (
+        inner.get("name")
+        or inner.get("handle")
+        or inner.get("summonerName")
+        or inner.get("summoner_name")
+        or inner.get("ign")
+        or inner.get("nickname")
+        or inner.get("playerName")
+        or (inner.get("player", {}) if isinstance(inner.get("player"), dict) else {}).get("name")
+        or "未知选手"
+    )
+    kda = inner.get("kda", inner.get("KDA", ""))
+    kills = inner.get("kills", inner.get("avgKills", inner.get("averageKills", inner.get("avg_kills", 0))))
+    deaths = inner.get("deaths", inner.get("avgDeaths", inner.get("averageDeaths", inner.get("avg_deaths", 0))))
+    assists = inner.get("assists", inner.get("avgAssists", inner.get("averageAssists", inner.get("avg_assists", 0))))
+    cs = inner.get("cs", inner.get("csPerMin", inner.get("cspm", inner.get("csPerMinute", 0))))
+    games = inner.get("gamesPlayed", inner.get("games", inner.get("totalGames", 0)))
+    kp = inner.get("killParticipation", inner.get("kp", inner.get("killParticipationRate", "")))
     lines = [f"📊 {name} 统计数据\n"]
     if kda:
         lines.append(f"KDA: {kda}")
