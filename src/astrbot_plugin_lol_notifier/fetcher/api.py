@@ -132,13 +132,23 @@ async def get_match_result(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
-    from .lolesports import fetch_schedule
+    from .lolesports import fetch_schedule, fetch_past_schedule
+
+    async def _try_past(search_round: str | None = None) -> list:
+        """回退到历史比赛。"""
+        past = await fetch_past_schedule(league=league_n)
+        if past.ok and past.value:
+            return past.value
+        return []
 
     result = await fetch_schedule(league=league_n)
     if not result.ok:
         return result
 
     matches = result.value or []
+    # 当前赛程为空时，回退到历史比赛
+    if not matches:
+        matches = await _try_past()
     if not matches:
         return Success(value=None)
 
@@ -147,6 +157,14 @@ async def get_match_result(
         completed = [m for m in matches if m.status in ("completed", "finished")]
         if completed:
             return Success(value=completed[-1])
+        # 当前赛程没有已完成的，查历史比赛
+        if not completed:
+            past_matches = await _try_past()
+            if past_matches:
+                past_completed = [m for m in past_matches if m.status in ("completed", "finished")]
+                if past_completed:
+                    return Success(value=past_completed[-1])
+                return Success(value=past_matches[-1])
         # 没找到已完成的，回退到最近一场
         return Success(value=matches[-1] if matches else None)
 
@@ -160,6 +178,16 @@ async def get_match_result(
     for m in matches:
         if m.round == r or m.match_id == r:
             return Success(value=m)
+    # 当前赛程没找到，查历史
+    past_matches = await _try_past()
+    if past_matches:
+        for m in past_matches:
+            if m.round == r or m.match_id == r:
+                if m.status in ("completed", "finished"):
+                    return Success(value=m)
+        for m in past_matches:
+            if m.round == r or m.match_id == r:
+                return Success(value=m)
     return Success(value=None)
 
 
@@ -175,16 +203,27 @@ async def get_match_bp(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
-    from .lolesports import fetch_match_detail, fetch_schedule
+    from .lolesports import fetch_match_detail, fetch_schedule, fetch_past_schedule
 
     # 先找到 match_id
     sched = await fetch_schedule(league=league_n)
     if not sched.ok:
         return sched  # 传递原始错误
-    if not sched.value:
+    matches = sched.value or []
+    # 当前赛程为空时，回退到历史比赛
+    if not matches:
+        past = await fetch_past_schedule(league=league_n)
+        if past.ok and past.value:
+            matches = past.value
+    if not matches:
         return Failure(error="赛程数据为空。")
 
-    target = _pick_match(sched.value, round_number)
+    target = _pick_match(matches, round_number)
+    if target is None:
+        # 当前赛程没找到，尝试历史比赛（如果还没查过）
+        past = await fetch_past_schedule(league=league_n)
+        if past.ok and past.value:
+            target = _pick_match(past.value, round_number)
     if target is None:
         return Failure(error="未找到对应比赛。")
 
@@ -222,15 +261,26 @@ async def get_match_detail(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
-    from .lolesports import fetch_match_detail, fetch_schedule
+    from .lolesports import fetch_match_detail, fetch_schedule, fetch_past_schedule
 
     sched = await fetch_schedule(league=league_n)
     if not sched.ok:
         return sched  # 传递原始错误
-    if not sched.value:
+    matches = sched.value or []
+    # 当前赛程为空时，回退到历史比赛
+    if not matches:
+        past = await fetch_past_schedule(league=league_n)
+        if past.ok and past.value:
+            matches = past.value
+    if not matches:
         return Failure(error="赛程数据为空。")
 
-    target = _pick_match(sched.value, round_number)
+    target = _pick_match(matches, round_number)
+    if target is None:
+        # 当前赛程没找到，尝试历史比赛（如果还没查过）
+        past = await fetch_past_schedule(league=league_n)
+        if past.ok and past.value:
+            target = _pick_match(past.value, round_number)
     if target is None:
         return Failure(error="未找到对应比赛。")
 

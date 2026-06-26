@@ -297,6 +297,26 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
     return Success(value=matches) if matches else Success(value=[])
 
 
+async def fetch_past_schedule(league: str, limit: int = 10) -> ScheduleResult:
+    """获取已完成的比赛（解析为 LeagueMatch 列表）GET /lol/schedule/past"""
+    slug = (league or "").strip().lower()
+    cito = _cito_slug(slug) if _cito_slug(slug) else slug
+    if not cito:
+        return Failure(error=f"不支持的赛区: {slug}，可用: {supported_leagues()}")
+
+    data = await _request("/lol/schedule/past", {"league": cito, "limit": str(limit)})
+    if "_error" in data:
+        return Failure(error=data["_error"])
+
+    events = _extract_events(data)
+    matches: list[LeagueMatch] = []
+    for ev in events:
+        m = _parse_match_event(ev, slug)
+        if m:
+            matches.append(m)
+    return Success(value=matches) if matches else Success(value=[])
+
+
 def _extract_events(data: dict) -> list[dict]:
     if isinstance(data, list):
         return data
@@ -348,9 +368,9 @@ async def fetch_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
 
 
 async def fetch_completed_matches(league: str, limit: int = 10) -> JsonResult:
-    """获取已完成的比赛 GET /lol/schedule/completed"""
+    """获取已完成的比赛 GET /lol/schedule/past"""
     slug = _resolve_slug(league)
-    return await _api_call("/lol/schedule/completed", {"league": slug, "limit": str(limit)})
+    return await _api_call("/lol/schedule/past", {"league": slug, "limit": str(limit)})
 
 
 async def fetch_today_schedule(league: str = "") -> JsonResult:

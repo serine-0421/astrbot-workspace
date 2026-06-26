@@ -239,7 +239,23 @@ class LoLNotifierPlugin(Star):
                     next_match = in_progress[0]
                     is_past = False
                 else:
-                    # 没有未来比赛，显示最近一次已完成的
+                    # 没有未来比赛，尝试回退到其他联赛
+                    fallback_result = await self._find_next_in_other_leagues(
+                        league, stage, season
+                    )
+                    if fallback_result is not None:
+                        fallback_match, fallback_league = fallback_result
+                        fallback_league_upper = fallback_league.upper()
+                        text = fmt.format_schedule([fallback_match], limit=1)
+                        text = text.replace(
+                            "📅 LoL 近期赛程",
+                            f"⏭️ 下一场比赛（{league.upper()}暂无未来赛程，最近是 {fallback_league_upper}）",
+                        )
+                        image_path = await img.render_schedule([fallback_match], limit=1)
+                        yield await self._render_or_text(event, text, image_path)
+                        return
+
+                    # 没有任何联赛有未来比赛，显示最近一次已完成的
                     completed = [m for m in schedule if m.status in ("completed", "finished")]
                     if completed:
                         completed.sort(key=lambda m: (m.start_date, m.start_time), reverse=True)
@@ -260,10 +276,56 @@ class LoLNotifierPlugin(Star):
                 image_path = await img.render_schedule([next_match], limit=1)
                 yield await self._render_or_text(event, text, image_path)
             case Success():
+                # 当前赛程为空，尝试回退到其他联赛
+                fallback_result = await self._find_next_in_other_leagues(
+                    league, stage, season
+                )
+                if fallback_result is not None:
+                    fallback_match, fallback_league = fallback_result
+                    fallback_league_upper = fallback_league.upper()
+                    text = fmt.format_schedule([fallback_match], limit=1)
+                    text = text.replace(
+                        "📅 LoL 近期赛程",
+                        f"⏭️ 下一场比赛（{league.upper()}暂无赛程，最近是 {fallback_league_upper}）",
+                    )
+                    image_path = await img.render_schedule([fallback_match], limit=1)
+                    yield await self._render_or_text(event, text, image_path)
+                    return
                 yield event.plain_result("📅 当前没有可显示的赛程信息。")
             case Failure(error=err):
                 logger.error(f"[LoLNotifier] /lol next error: {err}")
                 yield event.plain_result(f"❌ 获取下一场赛程失败：{err}")
+
+    async def _find_next_in_other_leagues(
+        self, original_league: str, stage: str, season: str
+    ):
+        """在其他联赛中寻找最近的未开始比赛。
+        返回 (match, league_name) 或 None。"""
+        # 优先顺序：国际赛事 → 主要赛区 → 次要赛区
+        _FALLBACK_ORDER = [
+            "msi", "worlds", "lck", "lpl", "lec", "lcs",
+            "pcs", "vcs", "lco", "ljl", "cblol", "lla", "lcl", "tcl",
+        ]
+        original_lower = original_league.strip().lower()
+        for fallback_league in _FALLBACK_ORDER:
+            if fallback_league == original_lower:
+                continue
+            result = await api.get_schedule(fallback_league, stage, season)
+            if result.ok and result.value:
+                unstarted = [
+                    m for m in result.value
+                    if m.status in ("unstarted", "")
+                ]
+                in_progress = [
+                    m for m in result.value
+                    if m.status in ("in_progress", "live")
+                ]
+                if unstarted:
+                    unstarted.sort(key=lambda m: (m.start_date, m.start_time))
+                    return (unstarted[0], fallback_league)
+                if in_progress:
+                    return (in_progress[0], fallback_league)
+        return None
 
     @lol.command("live")
     async def lol_live(
@@ -280,16 +342,11 @@ class LoLNotifierPlugin(Star):
             format_live_match,
         )
 
-        league_arg = (league or "").strip().lower() or None
-        result = await fetch_live_matches(league=league_arg)
-
+        result = await fetch_live_matches(league if league else None)
         match result:
-            case Success(value=live_matches) if live_matches:
-                # 获取详细帧数据
-                detailed = []
-                for lm in live_matches:
-                    detailed.append(await fetch_live_match_details(lm))
-
+            case Success(value=detailed) if detailed:
+                for lm in detailed:
+                    await fetch_live_match_details(lm)
                 # 格式化输出
                 lines_parts = []
                 for lm in detailed:
