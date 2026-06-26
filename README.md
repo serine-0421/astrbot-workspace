@@ -47,8 +47,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `search <关键词>` | 搜索选手（获取选手 ID） | `/lol player search Faker` |
-| `info <选手ID>` | 选手详细信息 | `/lol player info Faker` |
+| `info <选手名>` | 选手详细信息（自动搜索匹配） | `/lol player info Faker` |
 | `stats <选手ID>` | 赛季统计数据 | `/lol player stats Faker` |
 | `champions <选手ID>` | 英雄池 & 使用率 | `/lol player champions Faker` |
 

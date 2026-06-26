@@ -87,10 +87,9 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol team h2h <team_a> <team_b> 两队交手记录
 
 ━━━ 选手 ━━━
-  /lol player search <query>           搜索选手
-  /lol player info <player_id>         选手信息
-  /lol player stats <player_id>        选手统计数据
-  /lol player champions <player_id>    选手英雄池
+  /lol player info <name>           选手信息（自动搜索匹配）
+  /lol player stats <player_id>      选手统计数据
+  /lol player champions <player_id>  选手英雄池
 
 ━━━ 世界赛 ━━━
   /lol tournament info <id>            世界赛信息
@@ -628,31 +627,26 @@ class LoLNotifierPlugin(Star):
     def lol_player(self) -> None:
         """选手查询"""
 
-    @lol_player.command("search")
-    async def lol_player_search(self, event: AstrMessageEvent, query: str = ""):
-        """搜索选手。"""
-        if not query.strip():
-            yield event.plain_result("请提供搜索关键词。如: /lol player search Faker")
-            return
-        result = await api.search_players(query)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_search_players(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
     @lol_player.command("info")
     async def lol_player_info(self, event: AstrMessageEvent, player_id: str = ""):
-        """选手信息。"""
+        """选手信息（自动搜索匹配）。"""
         if not player_id.strip():
-            yield event.plain_result("请提供选手 ID。如: /lol player info Faker")
+            yield event.plain_result("请提供选手名称。如: /lol player info Faker")
             return
-        result = await api.get_player(player_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_player_info(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
+        name = player_id.strip()
+        # 1) 直接查询
+        result = await api.get_player(name)
+        if result.ok and result.value:
+            yield event.plain_result(fmt.format_player_info(result.value))
+            return
+        # 2) 搜索回退
+        search_result = await api.search_players(name)
+        if search_result.ok and search_result.value:
+            text = fmt.format_search_players(search_result.value)
+            if "未找到" not in text:
+                yield event.plain_result(f"🔍 未直接匹配到 '{name}'，搜索结果:\n\n{text}\n\n💡 请使用搜索结果中的选手 ID 重新查询")
+                return
+        yield event.plain_result(f"❌ 未找到选手 '{name}'")
 
     @lol_player.command("stats")
     async def lol_player_stats(self, event: AstrMessageEvent, player_id: str = ""):
