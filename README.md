@@ -1,6 +1,6 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、转会动态。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
+LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、转会动态与直播覆盖矩阵。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
 > 📡 数据来源：[citoapi](https://api.citoapi.com/api/v1) — 仅使用官方文档已记录的端点。
@@ -15,8 +15,9 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 ```
 
 依赖：
-- [AstrBot](https://github.com/AstrBotDevs/AstrBot) >= 适配当前 API 版本
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) >= v4
 - `httpx`、`aiohttp`、`pillow`
+
 ---
 
 ## 📖 命令参考
@@ -27,15 +28,15 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol schedule [赛区] [regular\|playoff]` | 查询赛区完整赛程（默认最近 5 场） | `/lol schedule lpl` |
-| `/lol next [赛区]` | 下一场比赛的完整时间表 | `/lol next lck` |
+| `/lol schedule [赛区] [stage] [season]` | 查询赛区完整赛程（默认最近 5 场） | `/lol schedule lpl` |
+| `/lol next [赛区] [stage] [season]` | 下一场未开赛的完整时间表 | `/lol next lck` |
 | `/lol today [赛区]` | 今日所有赛程 | `/lol today` `/lol today lpl` |
 | `/lol week [赛区]` | 本周所有赛程 | `/lol week` `/lol week lck` |
 | `/lol live [赛区]` | 正在进行的实时比赛（击杀/经济/塔/龙） | `/lol live` `/lol live lck` |
-| `/lol result [赛区] [round]` | 比赛结果（默认最近一场，可指定场次） | `/lol result lpl` `/lol result lck 3` |
-| `/lol bp [赛区] [round]` | 比赛 BP 阵容 / 详情（默认最近一场） | `/lol bp lck` `/lol bp lpl 2` |
-| `/lol detail [赛区] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
-| `/lol standings [赛区]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
+| `/lol result [赛区] [stage] [round]` | 比赛结果（默认最近一场） | `/lol result lpl` `/lol result lck playoff 3` |
+| `/lol bp [赛区] [stage] [round]` | 比赛 BP 阵容详情（默认最近一场） | `/lol bp lck` `/lol bp lpl regular 2` |
+| `/lol detail [赛区] [stage] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
+| `/lol standings [赛区] [stage] [season]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
 
 ### 🔹 战队 — `/lol team`
 
@@ -47,7 +48,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `stats <选手ID>` | 赛季统计数据 | `/lol player stats Faker` |
+| `stats <选手ID>` | 赛季统计数据（KDA/击杀/死亡/助攻/补刀等） | `/lol player stats Faker` |
 | `earnings <选手ID>` | 选手生涯奖金汇总 | `/lol player earnings Faker` |
 
 ### 🔹 转会
@@ -68,18 +69,18 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 命令 | 说明 |
 |:--|:--|
-| `/lol subscribe` | 订阅自动推送（赛程/B站视频/微博海报） |
+| `/lol subscribe` | 订阅自动推送（赛程 / B站视频 / 微博海报） |
 | `/lol unsubscribe` | 取消当前会话的自动推送 |
 | `/lol apikey` | 查看当前 API Key 状态 |
 | `/lol apikey <新Key>` | 手动设置自定义 API Key（可选） |
-| `/lol test` | 运行连通性测试 |
+| `/lol test [season]` | 运行连通性测试 |
 | `/lol help` | 显示完整帮助 |
 
 ---
 
 ### 🌍 支持的赛区
 
-| 缩写 | 赛区 | citoapi Slug |
+| 命令缩写 | 赛区 | 联赛 Slug |
 |:--|:--|:--|
 | `lck` | LCK（韩国） | `lol-lck` |
 | `lpl` | LPL（中国） | `lol-lpl` |
@@ -95,6 +96,9 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `tcl` | TCL（土耳其） | `lol-tcl` |
 | `msi` | MSI 季中邀请赛 | `lol-msi` |
 | `worlds` | 全球总决赛 | `lol-worlds` |
+
+> **stage** 参数可选 `regular`（常规赛，默认）或 `playoff`（季后赛）。
+> **season** 参数可选 `current`（当前赛季，默认）或具体赛季 ID。
 
 ---
 
@@ -112,13 +116,37 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 以下配置在 AstrBot 插件管理面板中设置，均已有合理默认值，无需修改即可使用：
 
-| 配置项 | 默认值 | 说明 |
-|:--|:--|:--|
-| `enable_image_render` | `false` | 开启 HTML 图片渲染模式 |
-| `enable_match_notifications` | `true` | 启用赛事自动推送 |
-| `enable_bilibili_video_push` | `true` | 推送 B站 LOL 官号视频 |
-| `enable_bilibili_blg_bp_push` | `true` | 推送 BLG BP 动态 |
-| `enable_weibo_poster_push` | `true` | 推送微博赛前海报 |
+### 图片渲染
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|:--|:--|:--|:--|
+| `enable_image_render` | `bool` | `false` | 开启 HTML 图片渲染模式（需 Pillow） |
+
+### citoapi
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|:--|:--|:--|:--|
+| `cito_api_key` | `string` | `""` | 自定义 API Key。留空则使用内置 Key。也可设环境变量 `CITO_API_KEY` |
+
+### B站
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|:--|:--|:--|:--|
+| `bilibili_uid` | `string` | `"50329118"` | 英雄联盟赛事官号 UID |
+| `enable_bilibili_video_push` | `bool` | `true` | 推送 LOL 官号视频 |
+| `bilibili_blg_uid` | `string` | `"545271146"` | BLG 官号 UID |
+| `enable_bilibili_blg_bp_push` | `bool` | `true` | 推送 BLG BP 图文动态 |
+| `bilibili_check_interval` | `int` | `60` | B站检查间隔（秒） |
+| `bilibili_cookie` | `string` | `""` | B站登录 Cookie（绕过风控）。也可设环境变量 `BILIBILI_COOKIE` |
+
+### 微博
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|:--|:--|:--|:--|
+| `weibo_uids` | `list` | `["6537214902"]` | 微博监控账号 UID 列表 |
+| `enable_weibo_poster_push` | `bool` | `true` | 推送赛前海报 |
+| `weibo_check_interval` | `int` | `300` | 微博检查间隔（秒） |
+| `weibo_cookie` | `string` | `""` | 微博 Cookie |
 
 ---
 
@@ -126,7 +154,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ```
 astrbot_plugin_lol_notifier/
-├── main.py                     # AstrBot 插件入口（28+ 命令）
+├── main.py                     # AstrBot 插件入口（18 条命令）
 ├── metadata.yaml               # 插件元数据
 ├── pyproject.toml              # 项目配置 & 依赖
 ├── _conf_schema.json           # 配置 Schema
@@ -140,20 +168,21 @@ astrbot_plugin_lol_notifier/
     └── astrbot_plugin_lol_notifier/
         ├── __init__.py
         ├── config.py           # 配置管理
-        ├── models.py           # 数据模型
-        ├── image_renderer.py   # HTML → 图片
+        ├── models.py           # 数据模型（dataclass）
+        ├── image_renderer.py   # HTML → 图片渲染
         ├── scheduler.py        # 后台推送调度
-        ├── state.py            # 去重状态管理
+        ├── state.py            # 推送去重状态管理
         ├── utils.py            # 工具函数
         ├── fetcher/            # 数据抓取层
-        │   ├── api.py               # 数据访问封装
-        │   ├── lolesports.py        # citoapi 网络层
+        │   ├── __init__.py          # 导出 18 个 api 函数 + B站/微博抓取器
+        │   ├── api.py               # 数据访问封装（40+ 端点 + TTL 缓存）
+        │   ├── lolesports.py        # citoapi HTTP 网络层（30 个官方端点）
         │   ├── bilibili.py          # B站 API
         │   ├── bilibili_dynamic.py  # B站动态 API
         │   └── weibo.py             # 微博 API
-        └── formatter/          # 格式化层
-            ├── card.py         # 卡片格式化
-            └── message.py      # 消息格式化
+        └── formatter/          # 格式化层（19 个活跃 formatter）
+            ├── __init__.py
+            └── message.py
 ```
 
 ### 数据流
@@ -163,16 +192,29 @@ astrbot_plugin_lol_notifier/
     ↓
 main.py → LoLNotifierPlugin（命令解析 & 路由）
     ↓
-api.py → 数据访问层（league 校验、数据过滤）
+fetcher/api.py → 数据访问层（league 校验 + TTL 缓存 + Result 封装）
     ↓
-lolesports.py → citoapi HTTP 请求
+fetcher/lolesports.py → citoapi HTTP 请求（_request + 速率限制 + 指数退避）
     ↓
 citoapi (https://api.citoapi.com/api/v1)
     ↓
-message.py → 格式化输出（文本/图片）
+formatter/message.py → 格式化输出（文本 / 图片）
+    ↓
+image_renderer.py → HTML 模板渲染（可选图片模式）
     ↓
 AstrBot 消息通道（QQ / Telegram / WebChat）
 ```
+
+### 架构分层
+
+| 层 | 职责 | 关键模块 |
+|:--|:--|:--|
+| **命令层** | 解析用户指令，参数校验，结果分发 | `main.py` |
+| **数据访问层** | TTL 缓存、league 校验、Result 模式封装 | `fetcher/api.py` |
+| **网络层** | HTTP 请求、速率限制（6s）、指数退避（429） | `fetcher/lolesports.py` |
+| **格式化层** | 19 个 formatter 将数据转为可读消息 | `formatter/message.py` |
+| **渲染层** | HTML 模板 → Pillow 图片渲染 | `image_renderer.py` |
+| **调度层** | 定时推送赛程/B站/微博更新 | `scheduler.py` |
 
 ---
 
@@ -188,16 +230,22 @@ AstrBot 消息通道（QQ / Telegram / WebChat）
 A: 14 个：LCK、LPL、LEC、LCS、LCO、LCL、LJL、PCS、VCS、CBLOL、LLA、TCL、MSI、Worlds。
 
 **Q: 需要配置 API Key 吗？**
-A: 不需要。插件内置了可用 Key，安装即用。如果想用自己的 Key 获得更稳定服务，可通过 `/lol apikey <你的key>` 设置。
+A: 不需要。插件内置了可用 Key，安装即用。如果想使用自己的 Key 获得更稳定服务，可通过 `/lol apikey <你的key>` 设置，或在配置面板填写 `cito_api_key`。
 
 **Q: `/lol live` 返回"没有正在进行的比赛"？**
 A: 仅在比赛进行中才有实时数据。请确认当前是否有 League 正在比赛。
 
-**Q: 如何获取战队/选手 ID？**
-A: 使用 `/lol team search <关键词>` 或 `/lol player search <关键词>` 即可获取 ID，再用于 info/stats 等命令。
+**Q: 如何获取选手 ID？**
+A: 直接使用选手的游戏名即可（如 `Faker`、`Chovy`、`ShowMaker`）。API 支持模糊匹配。
+
+**Q: 如何获取战队名？**
+A: 使用 `/lol team info` 查看所有战队列表，或用 `/lol team info <关键词>` 筛选（如 `T1`、`BLG`）。
 
 **Q: 只想自动推送，不想手动查？**
 A: 执行 `/lol subscribe`，调度器在后台自动推送赛程、B站视频和微博海报，无需主动查询。
+
+**Q: 图片模式和文本模式有什么区别？**
+A: 文本模式直接输出纯文本消息，响应快。图片模式将数据渲染为 HTML 再转图片，视觉效果更好但需要 Pillow 和字体/模板支持。在配置面板中设置 `enable_image_render` 切换。
 
 **Q: 数据来源可靠吗？**
 A: 赛事数据来自 citoapi (`https://api.citoapi.com/api/v1/lol`)，B站/微博来自平台公开接口。
