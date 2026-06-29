@@ -16,6 +16,8 @@ from .api import (
     get_champion_meta,
     get_champion_stats,
     get_completed_matches,
+    get_coverage,
+    get_match_coverage,
     get_gpr,
     get_leaderboard,
     get_league_details,
@@ -26,6 +28,7 @@ from .api import (
     get_player,
     get_player_career,
     get_player_champions,
+    get_player_earnings_summary,
     get_player_full_profile,
     get_player_matches,
     get_player_rankings,
@@ -50,6 +53,8 @@ from .api import (
     get_tournament_mvp,
     get_tournament_standings,
     get_transfers,
+    get_transfers_player,
+    get_transfers_team,
     get_trending,
     get_upcoming_matches,
     get_week_schedule,
@@ -83,6 +88,9 @@ __all__ = [
     "get_match_bp",
     "get_match_detail",
     "get_standings",
+    # Coverage
+    "get_coverage",
+    "get_match_coverage",
     # Leagues
     "get_all_leagues",
     "get_league_details",
@@ -102,6 +110,7 @@ __all__ = [
     "get_player_champions",
     "get_player_matches",
     "get_player_full_profile",
+    "get_player_earnings_summary",
     # Tournaments
     "get_all_tournaments",
     "get_tournament",
@@ -127,6 +136,8 @@ __all__ = [
     "get_msi_history",
     # Transfers
     "get_transfers",
+    "get_transfers_player",
+    "get_transfers_team",
     # Records
     "get_records",
     # Static Data

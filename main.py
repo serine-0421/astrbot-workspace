@@ -775,6 +775,19 @@ class LoLNotifierPlugin(Star):
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
+    @lol_player.command("earnings")
+    async def lol_player_earnings(self, event: AstrMessageEvent, player_id: str = ""):
+        """选手生涯奖金汇总。"""
+        if not player_id.strip():
+            yield event.plain_result("请提供选手 ID。如: /lol player earnings Faker")
+            return
+        result = await api.get_player_earnings_summary(player_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_player_earnings(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
     # ═══════════════════════════════════════════════
     #  锦标赛子命令组
     # ═══════════════════════════════════════════════
@@ -957,6 +970,32 @@ class LoLNotifierPlugin(Star):
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
+    @lol.command("transfers-player")
+    async def lol_transfers_player(self, event: AstrMessageEvent, player_id: str = ""):
+        """选手转会历史。"""
+        if not player_id.strip():
+            yield event.plain_result("请提供选手 ID。如: /lol transfers-player Faker")
+            return
+        result = await api.get_transfers_player(player_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_transfers_player(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("transfers-team")
+    async def lol_transfers_team(self, event: AstrMessageEvent, team_slug: str = ""):
+        """战队转会记录。"""
+        if not team_slug.strip():
+            yield event.plain_result("请提供战队名。如: /lol transfers-team T1")
+            return
+        result = await api.get_transfers_team(team_slug)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_transfers_team(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
     @lol.command("records")
     async def lol_records(self, event: AstrMessageEvent, league: str = ""):
         """赛事记录。"""
@@ -964,6 +1003,16 @@ class LoLNotifierPlugin(Star):
         match result:
             case Success(value=data):
                 yield event.plain_result(fmt.format_records(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    @lol.command("coverage")
+    async def lol_coverage(self, event: AstrMessageEvent):
+        """直播覆盖矩阵。"""
+        result = await api.get_coverage()
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_coverage(data))
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 

@@ -1039,6 +1039,122 @@ def format_records(data: dict) -> str:
     return "\n".join(lines)
 
 
+def format_player_earnings(data: dict) -> str:
+    """格式化选手奖金汇总。"""
+    if isinstance(data, list):
+        data = data[0] if data else {}
+    name = (
+        data.get("playerName") or data.get("name") or data.get("handle")
+        or data.get("summonerName") or ""
+    )
+    if isinstance(name, dict):
+        name = name.get("name") or name.get("handle") or "?"
+    total = data.get("totalEarnings", data.get("total", data.get("earnings", data.get("amount", 0))))
+    currency = data.get("currency", "USD")
+    top_pay = data.get("highestTournamentEarnings", data.get("highest", ""))
+    years = data.get("yearsActive", data.get("years", ""))
+    teams_count = data.get("teamsCount", data.get("teamsPlayed", ""))
+    lines = [f"💰 {name} 生涯奖金"] if name else ["💰 选手生涯奖金"]
+    lines.append(f"总奖金: ${total:,.2f} {currency}" if isinstance(total, (int, float)) else f"总奖金: {total} {currency}")
+    if top_pay:
+        lines.append(f"单赛事最高: ${top_pay:,.2f}" if isinstance(top_pay, (int, float)) else f"单赛事最高: {top_pay}")
+    if years:
+        lines.append(f"活跃年份: {years}")
+    if teams_count:
+        lines.append(f"效力战队: {teams_count}")
+    return "\n".join(lines)
+
+
+def format_transfers_player(data: dict) -> str:
+    """格式化选手转会历史。"""
+    if isinstance(data, list):
+        transfers = data
+    else:
+        transfers = data.get("transfers", data.get("data", data.get("results", [])))
+    if not transfers:
+        return "🔄 暂无该选手转会数据。"
+    lines = ["🔄 选手转会历史\n"]
+    for t in transfers[:20]:
+        if isinstance(t, str):
+            lines.append(f"  {t}")
+            continue
+        player = t.get("player", t.get("name", ""))
+        if isinstance(player, dict):
+            player = player.get("name", player.get("handle", "?"))
+        from_team = t.get("from", t.get("fromTeam", t.get("from_team", "")))
+        if isinstance(from_team, dict):
+            from_team = from_team.get("name", from_team.get("code", ""))
+        to_team = t.get("to", t.get("toTeam", t.get("to_team", "")))
+        if isinstance(to_team, dict):
+            to_team = to_team.get("name", to_team.get("code", ""))
+        date = t.get("date", t.get("season", t.get("year", "")))
+        line = f"  {from_team} → {to_team}" if from_team or to_team else ""
+        if player and line:
+            line = f"  {player}: {line[3:]}"
+        elif player:
+            line = f"  {player}"
+        if date:
+            line += f"  ({date})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_transfers_team(data: dict) -> str:
+    """格式化战队转会记录。"""
+    if isinstance(data, list):
+        transfers = data
+    else:
+        transfers = data.get("transfers", data.get("data", data.get("results", [])))
+    if not transfers:
+        return "🔄 暂无该战队转会数据。"
+    lines = ["🔄 战队转会记录\n"]
+    for t in transfers[:20]:
+        if isinstance(t, str):
+            lines.append(f"  {t}")
+            continue
+        player = t.get("player", t.get("name", ""))
+        if isinstance(player, dict):
+            player = player.get("name", player.get("handle", "?"))
+        direction = t.get("direction", t.get("type", ""))  # in/out
+        team = t.get("team", t.get("from", t.get("to", "")))
+        if isinstance(team, dict):
+            team = team.get("name", team.get("code", ""))
+        date = t.get("date", t.get("season", t.get("year", "")))
+        icon = "🔴 离队" if direction and direction.lower() in ("out", "leave", "sell") else "🟢 入队"
+        line = f"  {icon}: {player}"
+        if team:
+            line += f"  [{team}]"
+        if date:
+            line += f"  ({date})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_coverage(data: dict) -> str:
+    """格式化直播覆盖矩阵。"""
+    if not data or not isinstance(data, dict):
+        return "📡 暂无直播覆盖数据。"
+    lines = ["📡 直播覆盖矩阵\n"]
+    leagues = data.get("leagues", data.get("data", {}))
+    if isinstance(leagues, list):
+        for league in leagues[:10]:
+            if isinstance(league, dict):
+                name = league.get("name", league.get("league", "?"))
+                platforms = league.get("platforms", league.get("streams", []))
+                lines.append(f"  {name}: {', '.join(platforms) if platforms else '无'}")
+            else:
+                lines.append(f"  {league}")
+    elif isinstance(leagues, dict):
+        for league_name, platforms in leagues.items():
+            if isinstance(platforms, list):
+                lines.append(f"  {league_name}: {', '.join(platforms)}")
+            else:
+                lines.append(f"  {league_name}: {platforms}")
+    if len(lines) == 1:
+        lines.append("(暂无)" if not data else str(data)[:200])
+    return "\n".join(lines)
+
+
 def format_json_result(data: Any, title: str = "结果") -> str:
     """通用 JSON 格式化（fallback）。"""
     import json

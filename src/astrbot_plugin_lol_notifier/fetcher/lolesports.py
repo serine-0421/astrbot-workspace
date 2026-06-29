@@ -413,6 +413,30 @@ async def fetch_live_details(game_id: str) -> JsonResult:
     return await _api_call(f"/lol/live/{game_id}/details")
 
 
+async def fetch_live_series(match_id: str) -> JsonResult:
+    """获取实时系列赛状态 GET /lol/live/{matchId}/series"""
+    return await _api_call(f"/lol/live/{match_id}/series")
+
+
+async def fetch_live_visual_state(game_id: str) -> JsonResult:
+    """获取实时视觉状态（游戏时间/经济/击杀/塔/龙/男爵）GET /lol/live/{gameId}/visual-state"""
+    return await _api_call(f"/lol/live/{game_id}/visual-state")
+
+
+# ═══════════════════════════════════════════════════
+#  类别 3b — Coverage（直播覆盖检查）
+# ═══════════════════════════════════════════════════
+
+async def fetch_coverage() -> JsonResult:
+    """获取直播覆盖矩阵 GET /lol/coverage"""
+    return await _api_call("/lol/coverage")
+
+
+async def fetch_match_coverage(match_id: str) -> JsonResult:
+    """检查单场比赛直播覆盖 GET /lol/matches/{matchId}/coverage"""
+    return await _api_call(f"/lol/matches/{match_id}/coverage")
+
+
 # ═══════════════════════════════════════════════════
 #  类别 4 — Matches（比赛详情）
 # ═══════════════════════════════════════════════════
@@ -440,6 +464,11 @@ async def fetch_match_games(match_id: str) -> JsonResult:
 async def fetch_match_stats(match_id: str) -> JsonResult:
     """获取比赛统计数据 GET /lol/matches/{matchId}/stats"""
     return await _api_call(f"/lol/matches/{match_id}/stats")
+
+
+async def fetch_matches_live() -> JsonResult:
+    """获取所有正在进行的比赛（别名）GET /lol/matches/live"""
+    return await _api_call("/lol/matches/live")
 
 
 # ═══════════════════════════════════════════════════
@@ -484,6 +513,26 @@ async def fetch_game_objectives(game_id: str) -> JsonResult:
 async def fetch_game_postgame(game_id: str) -> JsonResult:
     """获取单局赛后数据 GET /lol/games/{gameId}/postgame"""
     return await _api_call(f"/lol/games/{game_id}/postgame")
+
+
+async def fetch_game_plates(game_id: str) -> JsonResult:
+    """获取单局塔皮数据（虚空巢虫/塔皮/兵线）GET /lol/games/{gameId}/plates"""
+    return await _api_call(f"/lol/games/{game_id}/plates")
+
+
+async def fetch_game_distributions(game_id: str) -> JsonResult:
+    """获取单局经济/伤害分布 GET /lol/games/{gameId}/distributions"""
+    return await _api_call(f"/lol/games/{game_id}/distributions")
+
+
+async def fetch_game_vision(game_id: str) -> JsonResult:
+    """获取单局视野数据 GET /lol/games/{gameId}/vision"""
+    return await _api_call(f"/lol/games/{game_id}/vision")
+
+
+async def fetch_game_jungle_share(game_id: str) -> JsonResult:
+    """获取单局打野资源占比 GET /lol/games/{gameId}/jungle-share"""
+    return await _api_call(f"/lol/games/{game_id}/jungle-share")
 
 
 # ═══════════════════════════════════════════════════
@@ -606,6 +655,11 @@ async def fetch_player_career(player_id: str) -> JsonResult:
 async def fetch_player_earnings(player_id: str) -> JsonResult:
     """获取选手奖金 GET /lol/players/{playerId}/earnings"""
     return await _api_call(f"/lol/players/{player_id}/earnings")
+
+
+async def fetch_player_earnings_summary(player_id: str) -> JsonResult:
+    """获取选手奖金汇总 GET /lol/players/{playerId}/earnings/summary"""
+    return await _api_call(f"/lol/players/{player_id}/earnings/summary")
 
 
 async def fetch_player_teams(player_id: str) -> JsonResult:
@@ -791,6 +845,16 @@ async def fetch_transfers(league: str = "", season: str = "current") -> JsonResu
     if league:
         params["league"] = _resolve_slug(league)
     return await _api_call("/lol/transfers", params)
+
+
+async def fetch_transfers_player(player_id: str) -> JsonResult:
+    """获取选手转会历史 GET /lol/transfers/player/{playerId}"""
+    return await _api_call(f"/lol/transfers/player/{player_id}")
+
+
+async def fetch_transfers_team(team_slug: str) -> JsonResult:
+    """获取战队转会活动 GET /lol/transfers/team/{slug}"""
+    return await _api_call(f"/lol/transfers/team/{team_slug}")
 
 
 # ═══════════════════════════════════════════════════
@@ -1132,11 +1196,11 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
 
 
 # ═══════════════════════════════════════════════════
-#  实时帧 — GET /lol/live/games/{gameId}/window
+#  实时帧 — GET /lol/live/{gameId}/visual-state
 # ═══════════════════════════════════════════════════
 
 async def fetch_live_frame(game_id: str, since: int = 0) -> LiveGameFrame | None:
-    endpoint = f"/lol/live/games/{game_id}/window"
+    endpoint = f"/lol/live/{game_id}/visual-state"
     params: dict[str, Any] = {}
     if since > 0:
         params["startingTime"] = str(since)

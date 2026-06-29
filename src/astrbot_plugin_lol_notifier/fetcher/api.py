@@ -414,6 +414,30 @@ async def get_completed_matches(league: str, limit: int = 10) -> JsonResult:
 #  联赛信息
 # ═══════════════════════════════════════════════════
 
+async def get_coverage() -> JsonResult:
+    """获取直播覆盖矩阵。"""
+    cache_key = _cache_key("coverage")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .lolesports import fetch_coverage
+    result = await fetch_coverage()
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
+
+
+async def get_match_coverage(match_id: str) -> JsonResult:
+    """检查单场比赛直播覆盖。"""
+    cache_key = _cache_key("match_coverage", match_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .lolesports import fetch_match_coverage
+    result = await fetch_match_coverage(match_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
+    return result
+
+
 async def get_all_leagues() -> JsonResult:
     """获取所有联赛列表。"""
     cache_key = _cache_key("all_leagues")
@@ -620,6 +644,18 @@ async def get_player_full_profile(player_id: str) -> JsonResult:
     from .lolesports import fetch_player_full_profile
     result = await fetch_player_full_profile(player_id=player_id)
     _cache_set(cache_key, result, _COMPOSITE_CACHE_TTL)
+    return result
+
+
+async def get_player_earnings_summary(player_id: str) -> JsonResult:
+    """获取选手奖金汇总。"""
+    cache_key = _cache_key("player_earnings_summary", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .lolesports import fetch_player_earnings_summary
+    result = await fetch_player_earnings_summary(player_id)
+    _cache_set(cache_key, result, _INFO_CACHE_TTL)
     return result
 
 
@@ -892,6 +928,30 @@ async def get_transfers(league: str = "", season: str = "current") -> JsonResult
         return cached
     from .lolesports import fetch_transfers
     result = await fetch_transfers(league=ln or "", season=season)
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
+
+
+async def get_transfers_player(player_id: str) -> JsonResult:
+    """获取选手转会历史。"""
+    cache_key = _cache_key("transfers_player", player_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .lolesports import fetch_transfers_player
+    result = await fetch_transfers_player(player_id)
+    _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
+    return result
+
+
+async def get_transfers_team(team_slug: str) -> JsonResult:
+    """获取战队转会活动。"""
+    cache_key = _cache_key("transfers_team", team_slug)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .lolesports import fetch_transfers_team
+    result = await fetch_transfers_team(team_slug)
     _cache_set(cache_key, result, _RECORDS_CACHE_TTL)
     return result
 
