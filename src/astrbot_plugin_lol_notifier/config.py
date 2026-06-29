@@ -38,16 +38,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
-# ── B站 LOL 官号 ──
-
-def get_bilibili_uid(config: Any) -> str:
-    return str(config.get("bilibili_uid", DEFAULT_CONFIG["bilibili_uid"])) if config else DEFAULT_CONFIG["bilibili_uid"]
-
-
-def is_bilibili_video_push_enabled(config: Any) -> bool:
-    return bool(config.get("enable_bilibili_video_push", True)) if config else True
-
-
 def get_bilibili_cookie(config: Any) -> str:
     """获取 B站 Cookie，用于绕过风控。环境变量 BILIBILI_COOKIE 优先。"""
     import os
@@ -55,12 +45,6 @@ def get_bilibili_cookie(config: Any) -> str:
     if env_cookie:
         return env_cookie
     return str(config.get("bilibili_cookie", "")) if config else ""
-
-
-# ── B站 BLG ──
-
-def get_blg_uid(config: Any) -> str:
-    return str(config.get("bilibili_blg_uid", DEFAULT_CONFIG["bilibili_blg_uid"])) if config else DEFAULT_CONFIG["bilibili_blg_uid"]
 
 
 def is_blg_bp_push_enabled(config: Any) -> bool:
@@ -77,16 +61,4 @@ def is_weibo_poster_push_enabled(config: Any) -> bool:
     return bool(config.get("enable_weibo_poster_push", True)) if config else True
 
 
-# ── 通用 ──
 
-def get_followed_teams(config: Any) -> list[str]:
-    return list(config.get("follow_teams", [])) if config else []
-
-
-def is_image_mode_enabled(config: Any) -> bool:
-    return bool(config.get("enable_image_render", False)) if config else False
-
-
-# 向后兼容别名
-is_bilibili_updates_enabled = is_bilibili_video_push_enabled
-is_weibo_updates_enabled = is_weibo_poster_push_enabled

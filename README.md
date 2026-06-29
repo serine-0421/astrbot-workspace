@@ -1,8 +1,9 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、英雄统计、全球战力排行、转会动态等一站式查询。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
+LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、转会动态。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
+> 📡 数据来源：[citoapi](https://api.citoapi.com/api/v1) — 仅使用官方文档已记录的端点。
 
 ---
 
@@ -32,7 +33,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol week [赛区]` | 本周所有赛程 | `/lol week` `/lol week lck` |
 | `/lol live [赛区]` | 正在进行的实时比赛（击杀/经济/塔/龙） | `/lol live` `/lol live lck` |
 | `/lol result [赛区] [round]` | 比赛结果（默认最近一场，可指定场次） | `/lol result lpl` `/lol result lck 3` |
-| `/lol bp [赛区] [round]` | 比赛 BP 阵容（默认最近一场） | `/lol bp lck` `/lol bp lpl 2` |
+| `/lol bp [赛区] [round]` | 比赛 BP 阵容 / 详情（默认最近一场） | `/lol bp lck` `/lol bp lpl 2` |
 | `/lol detail [赛区] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
 | `/lol standings [赛区]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
 
@@ -40,56 +41,27 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `info <战队名>` | 战队完整信息（自动搜索匹配，含阵容+比赛+统计） | `/lol team info BLG` |
-| `h2h <战队A> <战队B>` | 两队历史交手记录 | `/lol team h2h BLG TES` |
+| `info [战队名]` | 查看所有战队，或按名称筛选 | `/lol team info` `/lol team info T1` |
 
 ### 🔹 选手 — `/lol player`
 
 | 子命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `info <选手名>` | 选手详细信息（自动搜索匹配） | `/lol player info Faker` |
 | `stats <选手ID>` | 赛季统计数据 | `/lol player stats Faker` |
-| `champions <选手ID>` | 英雄池 & 使用率 | `/lol player champions Faker` |
 | `earnings <选手ID>` | 选手生涯奖金汇总 | `/lol player earnings Faker` |
 
-### 🔹 世界赛 — `/lol tournament`
-
-| 子命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `info <赛事ID>` | 世界赛详情 (⚠️ API 可能不可用) | `/lol tournament info worlds2024` |
-| `standings <赛事ID>` | 世界赛积分榜 (⚠️ API 可能不可用) | `/lol tournament standings worlds2024` |
-| `bracket <赛事ID>` | 淘汰赛对阵 (⚠️ API 可能不可用) | `/lol tournament bracket worlds2024` |
-| `mvp <赛事ID>` | 世界赛 MVP (⚠️ API 可能不可用) | `/lol tournament mvp worlds2024` |
-
-### 🔹 英雄数据 — `/lol champion`
-
-| 子命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `/lol champion stats [赛区]` | 英雄胜率/登场率/禁用率统计 (⚠️) | `/lol champion stats lck` |
-| `/lol champion meta [赛区]` | 当前版本 Meta 英雄等级排行 | `/lol champion meta lpl` |
-
-### 🔹 排名 & 排行榜
+### 🔹 转会
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol ranking gpr` | 全球战力排名 (GPR) (⚠️ API 可能不可用) | `/lol ranking gpr` |
-| `/lol ranking players <指标>` | 选手数据排名 | `/lol ranking players kda` |
-| `/lol leaderboard <指标> [赛区]` | 赛区内数据排行榜 | `/lol leaderboard kda lck` |
-
-**排行榜指标：** `kda` `earnings` `winrate` `firstblood` `championships`
-
-**选手排名指标：** `kda`
+| `/lol transfers [赛区]` | 赛区转会动态 | `/lol transfers lck` |
+| `/lol transfers-player <选手ID>` | 选手转会历史 | `/lol transfers-player Faker` |
+| `/lol transfers-team <战队名>` | 战队转会记录 | `/lol transfers-team T1` |
 
 ### 🔹 其他查询
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol trending` | 热门趋势概览（选手/战队/英雄） | `/lol trending` |
-| `/lol history <worlds\|msi>` | 世界赛 / MSI 历史冠军 | `/lol history worlds` |
-| `/lol transfers [赛区]` | 赛区转会动态 | `/lol transfers lck` |
-| `/lol transfers-player <选手ID>` | 选手转会历史 | `/lol transfers-player Faker` |
-| `/lol transfers-team <战队名>` | 战队转会记录 | `/lol transfers-team T1` |
-| `/lol records [赛区]` | 赛事历史记录 | `/lol records` |
 | `/lol coverage` | 直播覆盖矩阵（各赛区直播平台） | `/lol coverage` |
 
 ### 🔹 订阅 & 管理

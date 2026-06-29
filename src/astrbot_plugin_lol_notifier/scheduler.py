@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -24,7 +24,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Image, Plain
 
 from . import image_renderer as img
-from .config import get_blg_uid, get_bilibili_cookie, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
+from .config import get_bilibili_cookie, get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
 from .fetcher import api as fetcher_api
 from .fetcher import bilibili, bilibili_dynamic, lolesports, weibo
 from .formatter import message as formatter

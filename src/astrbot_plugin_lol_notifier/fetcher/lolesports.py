@@ -1,4 +1,4 @@
-"""LoL Esports 数据抓取器 — citoapi 封装。
+﻿"""LoL Esports 数据抓取器 — citoapi 封装。
 
 数据来源：citoapi (https://api.citoapi.com/api/v1)
 
@@ -23,11 +23,9 @@ import httpx
 from astrbot.api import logger
 
 from ..models import (
-    BPEntry,
     Failure,
     JsonListResult,
     JsonResult,
-    LeaderboardEntry,
     LeagueMatch,
     LiveGameFrame,
     LiveMatch,
@@ -275,10 +273,11 @@ async def _api_call(endpoint: str, params: dict | None = None) -> JsonResult:
 
 
 # ═══════════════════════════════════════════════════
-#  赛程 — GET /lol/leagues/{slug}/schedule
+#  Schedule & Standings（赛程 & 积分榜）
 # ═══════════════════════════════════════════════════
 
 async def fetch_schedule(league: str = "lck") -> ScheduleResult:
+    """获取联赛赛程 GET /lol/leagues/{cito}/schedule"""
     slug = (league or "").strip().lower()
     cito = _cito_slug(slug)
     if not cito:
@@ -297,24 +296,29 @@ async def fetch_schedule(league: str = "lck") -> ScheduleResult:
     return Success(value=matches) if matches else Success(value=[])
 
 
-async def fetch_past_schedule(league: str, limit: int = 10) -> ScheduleResult:
-    """获取已完成的比赛（解析为 LeagueMatch 列表）GET /lol/schedule/past"""
+async def fetch_standings(league: str = "lck") -> JsonResult:
+    """获取联赛积分榜 GET /lol/leagues/{cito}/standings"""
     slug = (league or "").strip().lower()
-    cito = _cito_slug(slug) if _cito_slug(slug) else slug
+    cito = _cito_slug(slug)
     if not cito:
         return Failure(error=f"不支持的赛区: {slug}，可用: {supported_leagues()}")
+    return await _api_call(f"/lol/leagues/{cito}/standings")
 
-    data = await _request("/lol/schedule/past", {"league": cito, "limit": str(limit)})
-    if "_error" in data:
-        return Failure(error=data["_error"])
 
-    events = _extract_events(data)
-    matches: list[LeagueMatch] = []
-    for ev in events:
-        m = _parse_match_event(ev, slug)
-        if m:
-            matches.append(m)
-    return Success(value=matches) if matches else Success(value=[])
+async def fetch_today_schedule(league: str = "") -> JsonResult:
+    """获取今日赛程 GET /lol/schedule/today"""
+    params: dict[str, str] = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    return await _api_call("/lol/schedule/today", params)
+
+
+async def fetch_upcoming_schedule(league: str = "") -> JsonResult:
+    """获取即将到来的赛程 GET /lol/schedule/upcoming"""
+    params: dict[str, str] = {}
+    if league:
+        params["league"] = _resolve_slug(league)
+    return await _api_call("/lol/schedule/upcoming", params)
 
 
 def _extract_events(data: dict) -> list[dict]:
@@ -338,7 +342,7 @@ def _extract_events(data: dict) -> list[dict]:
 
 
 # ═══════════════════════════════════════════════════
-#  类别 1 — Leagues（联赛信息）
+#  Leagues（联赛）
 # ═══════════════════════════════════════════════════
 
 async def fetch_all_leagues() -> JsonResult:
@@ -346,71 +350,23 @@ async def fetch_all_leagues() -> JsonResult:
     return await _api_call("/lol/leagues")
 
 
-async def fetch_league_details(slug: str) -> JsonResult:
-    """获取联赛详情 GET /lol/leagues/{slug}"""
-    return await _api_call(f"/lol/leagues/{slug}")
-
-
 # ═══════════════════════════════════════════════════
-#  类别 2 — Schedule（赛程）
+#  Live（实时比赛）
 # ═══════════════════════════════════════════════════
 
-async def fetch_schedule_by_date(league: str, date: str) -> JsonResult:
-    """按日期获取赛程 GET /lol/leagues/{slug}/schedule?date=2025-01-15"""
-    slug = _resolve_slug(league)
-    return await _api_call(f"/lol/leagues/{slug}/schedule", {"date": date})
+async def fetch_coverage() -> JsonResult:
+    """获取直播覆盖矩阵 GET /lol/coverage"""
+    return await _api_call("/lol/coverage")
 
 
-async def fetch_upcoming_matches(league: str, limit: int = 10) -> JsonResult:
-    """获取即将到来的比赛 GET /lol/schedule/upcoming"""
-    slug = _resolve_slug(league)
-    return await _api_call("/lol/schedule/upcoming", {"league": slug, "limit": str(limit)})
+async def fetch_matches_live() -> JsonResult:
+    """获取所有正在进行的比赛 GET /lol/matches/live"""
+    return await _api_call("/lol/matches/live")
 
 
-async def fetch_completed_matches(league: str, limit: int = 10) -> JsonResult:
-    """获取已完成的比赛 GET /lol/schedule/past"""
-    slug = _resolve_slug(league)
-    return await _api_call("/lol/schedule/past", {"league": slug, "limit": str(limit)})
-
-
-async def fetch_today_schedule(league: str = "") -> JsonResult:
-    """获取今日赛程 GET /lol/schedule/today"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/schedule/today", params)
-
-
-async def fetch_week_schedule(league: str = "") -> JsonResult:
-    """获取本周赛程 GET /lol/schedule/week"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/schedule/week", params)
-
-
-# ═══════════════════════════════════════════════════
-#  类别 3 — Live（实时比赛）
-# ═══════════════════════════════════════════════════
-
-async def fetch_live_window(game_id: str) -> JsonResult:
-    """获取实时比赛窗口数据 GET /lol/live/{gameId}/window"""
-    return await _api_call(f"/lol/live/{game_id}/window")
-
-
-async def fetch_live_stats(game_id: str) -> JsonResult:
-    """获取实时比赛统计数据 GET /lol/live/{gameId}/stats"""
-    return await _api_call(f"/lol/live/{game_id}/stats")
-
-
-async def fetch_live_events(game_id: str) -> JsonResult:
-    """获取实时比赛事件 GET /lol/live/{gameId}/events"""
-    return await _api_call(f"/lol/live/{game_id}/events")
-
-
-async def fetch_live_details(game_id: str) -> JsonResult:
-    """获取实时比赛详情 GET /lol/live/{gameId}/details"""
-    return await _api_call(f"/lol/live/{game_id}/details")
+async def fetch_match_coverage(match_id: str) -> JsonResult:
+    """检查单场比赛直播覆盖 GET /lol/matches/{matchId}/coverage"""
+    return await _api_call(f"/lol/matches/{match_id}/coverage")
 
 
 async def fetch_live_series(match_id: str) -> JsonResult:
@@ -419,26 +375,12 @@ async def fetch_live_series(match_id: str) -> JsonResult:
 
 
 async def fetch_live_visual_state(game_id: str) -> JsonResult:
-    """获取实时视觉状态（游戏时间/经济/击杀/塔/龙/男爵）GET /lol/live/{gameId}/visual-state"""
+    """获取实时视觉状态 GET /lol/live/{gameId}/visual-state"""
     return await _api_call(f"/lol/live/{game_id}/visual-state")
 
 
 # ═══════════════════════════════════════════════════
-#  类别 3b — Coverage（直播覆盖检查）
-# ═══════════════════════════════════════════════════
-
-async def fetch_coverage() -> JsonResult:
-    """获取直播覆盖矩阵 GET /lol/coverage"""
-    return await _api_call("/lol/coverage")
-
-
-async def fetch_match_coverage(match_id: str) -> JsonResult:
-    """检查单场比赛直播覆盖 GET /lol/matches/{matchId}/coverage"""
-    return await _api_call(f"/lol/matches/{match_id}/coverage")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 4 — Matches（比赛详情）
+#  Matches & Games（比赛 & 对局）
 # ═══════════════════════════════════════════════════
 
 async def fetch_match_info(match_id: str) -> JsonResult:
@@ -446,43 +388,14 @@ async def fetch_match_info(match_id: str) -> JsonResult:
     return await _api_call(f"/lol/matches/{match_id}")
 
 
-async def fetch_match_timeline(match_id: str) -> JsonResult:
-    """获取比赛时间线 GET /lol/matches/{matchId}/timeline"""
-    return await _api_call(f"/lol/matches/{match_id}/timeline")
-
-
-async def fetch_match_players(match_id: str) -> JsonResult:
-    """获取比赛选手统计 GET /lol/matches/{matchId}/player-stats"""
-    return await _api_call(f"/lol/matches/{match_id}/player-stats")
-
-
 async def fetch_match_games(match_id: str) -> JsonResult:
     """获取比赛的各局 GET /lol/matches/{matchId}/games"""
     return await _api_call(f"/lol/matches/{match_id}/games")
 
 
-async def fetch_match_stats(match_id: str) -> JsonResult:
-    """获取比赛统计数据 GET /lol/matches/{matchId}/stats"""
-    return await _api_call(f"/lol/matches/{match_id}/stats")
-
-
-async def fetch_matches_live() -> JsonResult:
-    """获取所有正在进行的比赛（别名）GET /lol/matches/live"""
-    return await _api_call("/lol/matches/live")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 5 — Games（单局详情）
-# ═══════════════════════════════════════════════════
-
 async def fetch_game_info(game_id: str) -> JsonResult:
     """获取单局比赛信息 GET /lol/games/{gameId}"""
     return await _api_call(f"/lol/games/{game_id}")
-
-
-async def fetch_game_timeline(game_id: str) -> JsonResult:
-    """获取单局时间线 GET /lol/games/{gameId}/timeline"""
-    return await _api_call(f"/lol/games/{game_id}/timeline")
 
 
 async def fetch_game_stats(game_id: str) -> JsonResult:
@@ -495,28 +408,13 @@ async def fetch_game_player_stats(game_id: str) -> JsonResult:
     return await _api_call(f"/lol/games/{game_id}/player-stats")
 
 
-async def fetch_game_builds(game_id: str) -> JsonResult:
-    """获取单局出装 GET /lol/games/{gameId}/builds"""
-    return await _api_call(f"/lol/games/{game_id}/builds")
-
-
-async def fetch_game_gold(game_id: str) -> JsonResult:
-    """获取单局经济曲线 GET /lol/games/{gameId}/gold"""
-    return await _api_call(f"/lol/games/{game_id}/gold")
-
-
-async def fetch_game_objectives(game_id: str) -> JsonResult:
-    """获取单局目标控制 GET /lol/games/{gameId}/objectives"""
-    return await _api_call(f"/lol/games/{game_id}/objectives")
-
-
 async def fetch_game_postgame(game_id: str) -> JsonResult:
     """获取单局赛后数据 GET /lol/games/{gameId}/postgame"""
     return await _api_call(f"/lol/games/{game_id}/postgame")
 
 
 async def fetch_game_plates(game_id: str) -> JsonResult:
-    """获取单局塔皮数据（虚空巢虫/塔皮/兵线）GET /lol/games/{gameId}/plates"""
+    """获取单局塔皮数据 GET /lol/games/{gameId}/plates"""
     return await _api_call(f"/lol/games/{game_id}/plates")
 
 
@@ -536,7 +434,7 @@ async def fetch_game_jungle_share(game_id: str) -> JsonResult:
 
 
 # ═══════════════════════════════════════════════════
-#  类别 6 — Teams（战队）
+#  Teams（战队）
 # ═══════════════════════════════════════════════════
 
 async def fetch_all_teams(league: str = "") -> JsonResult:
@@ -547,84 +445,19 @@ async def fetch_all_teams(league: str = "") -> JsonResult:
     return await _api_call("/lol/teams", params)
 
 
-async def fetch_team(team_id: str) -> JsonResult:
-    """获取战队信息 GET /lol/teams/{slug}"""
-    return await _api_call(f"/lol/teams/{team_id}")
-
-
-async def fetch_team_roster(team_id: str) -> JsonResult:
-    """获取战队阵容 GET /lol/teams/{slug}/roster"""
-    return await _api_call(f"/lol/teams/{team_id}/roster")
-
-
-async def fetch_team_roster_history(team_id: str) -> JsonResult:
+async def fetch_team_roster_history(team_slug: str) -> JsonResult:
     """获取战队历史阵容 GET /lol/teams/{slug}/roster/history"""
-    return await _api_call(f"/lol/teams/{team_id}/roster/history")
+    return await _api_call(f"/lol/teams/{team_slug}/roster/history")
 
 
-async def fetch_team_matches(team_id: str, limit: int = 10) -> JsonResult:
-    """获取战队比赛记录 GET /lol/teams/{slug}/matches"""
-    return await _api_call(f"/lol/teams/{team_id}/matches", {"limit": str(limit)})
-
-
-async def fetch_team_stats(team_id: str, season: str = "current") -> JsonResult:
-    """获取战队统计数据 GET /lol/teams/{slug}/stats"""
-    return await _api_call(f"/lol/teams/{team_id}/stats", {"season": season})
-
-
-async def fetch_team_objectives(team_id: str, last: int = 10) -> JsonResult:
+async def fetch_team_objectives(team_slug: str, last: int = 10) -> JsonResult:
     """获取战队目标控制率 GET /lol/teams/{slug}/objectives"""
-    return await _api_call(f"/lol/teams/{team_id}/objectives", {"last": str(last)})
-
-
-async def fetch_team_h2h(team_a: str, team_b: str) -> JsonResult:
-    """获取战队交手记录 GET /lol/teams/{slug}/h2h/{opponentSlug}"""
-    return await _api_call(f"/lol/teams/{team_a}/h2h/{team_b}")
-
-
-async def fetch_team_earnings(team_id: str) -> JsonResult:
-    """获取战队奖金 GET /lol/teams/{slug}/earnings"""
-    return await _api_call(f"/lol/teams/{team_id}/earnings")
-
-
-async def fetch_team_achievements(team_id: str) -> JsonResult:
-    """获取战队成就 GET /lol/teams/{slug}/achievements"""
-    return await _api_call(f"/lol/teams/{team_id}/achievements")
-
-
-async def fetch_team_champions(team_id: str) -> JsonResult:
-    """获取战队英雄池 GET /lol/teams/{slug}/champions"""
-    return await _api_call(f"/lol/teams/{team_id}/champions")
-
-
-async def fetch_team_ranking_history(team_id: str) -> JsonResult:
-    """获取战队排名历史 GET /lol/teams/{slug}/ranking-history"""
-    return await _api_call(f"/lol/teams/{team_id}/ranking-history")
+    return await _api_call(f"/lol/teams/{team_slug}/objectives", {"last": str(last)})
 
 
 # ═══════════════════════════════════════════════════
-#  类别 7 — Players（选手）
+#  Players（选手）
 # ═══════════════════════════════════════════════════
-
-async def fetch_all_players(league: str = "", team: str = "") -> JsonResult:
-    """获取所有选手 GET /lol/players"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    if team:
-        params["team"] = team
-    return await _api_call("/lol/players", params)
-
-
-async def fetch_player_search(query: str) -> JsonResult:
-    """选手自动补全搜索 GET /lol/players/search"""
-    return await _api_call("/lol/players/search", {"q": query})
-
-
-async def fetch_player(player_id: str) -> JsonResult:
-    """获取选手信息 GET /lol/players/{playerId}"""
-    return await _api_call(f"/lol/players/{player_id}")
-
 
 async def fetch_player_stats(player_id: str, season: str = "current") -> JsonResult:
     """获取选手统计数据 GET /lol/players/{playerId}/stats"""
@@ -647,11 +480,6 @@ async def fetch_player_champion_pool(player_id: str, last: int = 20, league: str
     return await _api_call(f"/lol/players/{player_id}/champion-pool", params)
 
 
-async def fetch_player_career(player_id: str) -> JsonResult:
-    """获取选手生涯数据 GET /lol/players/{playerId}/stats/career"""
-    return await _api_call(f"/lol/players/{player_id}/stats/career")
-
-
 async def fetch_player_earnings(player_id: str) -> JsonResult:
     """获取选手奖金 GET /lol/players/{playerId}/earnings"""
     return await _api_call(f"/lol/players/{player_id}/earnings")
@@ -667,462 +495,43 @@ async def fetch_player_teams(player_id: str) -> JsonResult:
     return await _api_call(f"/lol/players/{player_id}/teams")
 
 
-async def fetch_player_champions(player_id: str) -> JsonResult:
-    """获取选手英雄使用统计 GET /lol/players/{playerId}/champions"""
-    return await _api_call(f"/lol/players/{player_id}/champions")
-
-
-async def fetch_player_matches(player_id: str, limit: int = 10) -> JsonResult:
-    """获取选手比赛记录 GET /lol/players/{playerId}/matches"""
-    return await _api_call(f"/lol/players/{player_id}/matches", {"limit": str(limit)})
-
-
-async def fetch_player_achievements(player_id: str) -> JsonResult:
-    """获取选手成就 GET /lol/players/{playerId}/achievements"""
-    return await _api_call(f"/lol/players/{player_id}/achievements")
-
-
-async def fetch_player_compare(player_a: str, player_b: str) -> JsonResult:
-    """选手对比 GET /lol/players/{playerId}/compare/{otherPlayerId}"""
-    return await _api_call(f"/lol/players/{player_a}/compare/{player_b}")
-
-
 # ═══════════════════════════════════════════════════
-#  类别 8 — Tournaments（世界赛）
+#  Transfers（转会）
 # ═══════════════════════════════════════════════════
 
-async def fetch_all_tournaments(league: str = "") -> JsonResult:
-    """获取所有世界赛 GET /lol/tournaments"""
+async def fetch_transfers(league: str = "") -> JsonResult:
+    """获取转会列表 GET /lol/transfers"""
     params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/tournaments", params)
-
-
-async def fetch_tournaments_live() -> JsonResult:
-    """获取正在进行的赛事 GET /lol/tournaments/live"""
-    return await _api_call("/lol/tournaments/live")
-
-
-async def _tournament_call(path: str, tournament_id: str) -> JsonResult:
-    """调用世界赛 API，带 slug 回退机制。"""
-    slug = _resolve_tournament_slug(tournament_id)
-    result = await _api_call(f"/lol/tournaments/{slug}{path}")
-    if not result.ok and slug != tournament_id:
-        result2 = await _api_call(f"/lol/tournaments/{tournament_id}{path}")
-        if result2.ok:
-            return result2
-    return result
-
-
-async def fetch_tournament(tournament_id: str) -> JsonResult:
-    """获取世界赛信息 GET /lol/tournaments/{tournamentId}"""
-    return await _tournament_call("", tournament_id)
-
-
-async def fetch_tournament_standings(tournament_id: str) -> JsonResult:
-    """获取世界赛积分榜 GET /lol/tournaments/{tournamentId}/standings"""
-    return await _tournament_call("/standings", tournament_id)
-
-
-async def fetch_tournament_bracket(tournament_id: str) -> JsonResult:
-    """获取世界赛淘汰赛对阵 GET /lol/tournaments/{tournamentId}/bracket"""
-    return await _tournament_call("/bracket", tournament_id)
-
-
-async def fetch_tournament_matches(tournament_id: str, limit: int = 20) -> JsonResult:
-    """获取世界赛比赛列表 GET /lol/tournaments/{tournamentId}/matches"""
-    slug = _resolve_tournament_slug(tournament_id)
-    return await _api_call(f"/lol/tournaments/{slug}/matches", {"limit": str(limit)})
-
-
-async def fetch_tournament_results(tournament_id: str) -> JsonResult:
-    """获取世界赛结果 GET /lol/tournaments/{tournamentId}/results"""
-    return await _tournament_call("/results", tournament_id)
-
-
-async def fetch_tournament_mvp(tournament_id: str) -> JsonResult:
-    """获取世界赛 MVP GET /lol/tournaments/{tournamentId}/mvp"""
-    return await _tournament_call("/mvp", tournament_id)
-
-
-async def fetch_tournament_stats(tournament_id: str) -> JsonResult:
-    """获取世界赛统计数据 GET /lol/tournaments/{tournamentId}/stats"""
-    return await _tournament_call("/stats", tournament_id)
-
-
-# ═══════════════════════════════════════════════════
-#  类别 9 — Standings（积分榜/排名）
-# ═══════════════════════════════════════════════════
-
-async def fetch_league_group_standings(league: str, group: str = "") -> JsonResult:
-    """获取联赛分组积分榜 GET /lol/leagues/{slug}/standings?group=A"""
-    slug = _resolve_slug(league)
-    params: dict[str, str] = {}
-    if group:
-        params["group"] = group
-    return await _api_call(f"/lol/leagues/{slug}/standings", params)
-
-
-# ═══════════════════════════════════════════════════
-#  类别 10 — Champions（英雄数据）
-# ═══════════════════════════════════════════════════
-
-async def fetch_champion_stats(league: str = "", season: str = "current") -> JsonResult:
-    """获取英雄统计 GET /lol/champions/stats"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/champions/stats", params)
-
-
-async def fetch_champion_meta(league: str = "") -> JsonResult:
-    """获取当前版本 Meta 英雄等级 GET /lol/champions/meta"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/champions/meta", params)
-
-
-async def fetch_champion_matchups(champion: str, league: str = "") -> JsonResult:
-    """获取英雄对阵数据 GET /lol/champions/{championId}/matchups"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call(f"/lol/champions/{champion}/matchups", params)
-
-
-async def fetch_champion_details(champion: str) -> JsonResult:
-    """获取英雄详细信息 GET /lol/champions/{championId}/stats"""
-    return await _api_call(f"/lol/champions/{champion}/stats")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 11 — Rankings（排行榜）
-# ═══════════════════════════════════════════════════
-
-async def fetch_global_power_rankings() -> JsonResult:
-    """获取全球战力排名 GET /lol/rankings"""
-    return await _api_call("/lol/rankings")
-
-
-async def fetch_team_rankings(metric: str = "wins", limit: int = 20) -> JsonResult:
-    """获取战队排名 GET /lol/rankings/teams"""
-    return await _api_call("/lol/rankings/teams", {"metric": metric, "limit": str(limit)})
-
-
-# ═══════════════════════════════════════════════════
-#  类别 12 — History（历史数据）
-# ═══════════════════════════════════════════════════
-
-async def fetch_worlds_history() -> JsonResult:
-    """获取世界赛历史 GET /lol/history/worlds"""
-    return await _api_call("/lol/history/worlds")
-
-
-async def fetch_msi_history() -> JsonResult:
-    """获取 MSI 历史 GET /lol/history/msi"""
-    return await _api_call("/lol/history/msi")
-
-
-async def fetch_hall_of_fame() -> JsonResult:
-    """获取名人堂 GET /lol/history/halloffame"""
-    return await _api_call("/lol/history/halloffame")
-
-
-async def fetch_history_year(year: int | str) -> JsonResult:
-    """获取年份历史 GET /lol/history/{year}"""
-    return await _api_call(f"/lol/history/{year}")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 13 — Transfers（转会）
-# ═══════════════════════════════════════════════════
-
-async def fetch_transfers(league: str = "", season: str = "current") -> JsonResult:
-    """获取转会信息 GET /lol/transfers"""
-    params: dict[str, str] = {"season": season}
     if league:
         params["league"] = _resolve_slug(league)
     return await _api_call("/lol/transfers", params)
 
 
 async def fetch_transfers_player(player_id: str) -> JsonResult:
-    """获取选手转会历史 GET /lol/transfers/player/{playerId}"""
+    """获取选手转会记录 GET /lol/transfers/player/{playerId}"""
     return await _api_call(f"/lol/transfers/player/{player_id}")
 
 
 async def fetch_transfers_team(team_slug: str) -> JsonResult:
-    """获取战队转会活动 GET /lol/transfers/team/{slug}"""
+    """获取战队转会记录 GET /lol/transfers/team/{slug}"""
     return await _api_call(f"/lol/transfers/team/{team_slug}")
 
 
 # ═══════════════════════════════════════════════════
-#  类别 14 — Leaderboards（数据排行）
+#  Webhooks（事件订阅）
 # ═══════════════════════════════════════════════════
 
-async def fetch_leaderboards_kda(league: str = "", season: str = "current") -> JsonResult:
-    """KDA 排行榜 GET /lol/leaderboards/kda"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/leaderboards/kda", params)
-
-
-async def fetch_leaderboards_earnings(league: str = "", season: str = "current") -> JsonResult:
-    """奖金排行榜 GET /lol/leaderboards/earnings"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/leaderboards/earnings", params)
-
-
-async def fetch_leaderboards_winrate(league: str = "", season: str = "current") -> JsonResult:
-    """胜率排行榜 GET /lol/leaderboards/winrate"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/leaderboards/winrate", params)
-
-
-async def fetch_leaderboards_firstblood(league: str = "", season: str = "current") -> JsonResult:
-    """一血率排行榜 GET /lol/leaderboards/firstblood"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/leaderboards/firstblood", params)
-
-
-async def fetch_leaderboards_championships(league: str = "", season: str = "current") -> JsonResult:
-    """冠军数排行榜 GET /lol/leaderboards/championships"""
-    params: dict[str, str] = {"season": season}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/leaderboards/championships", params)
+async def fetch_webhook_events() -> JsonResult:
+    """获取 Webhook 事件类型列表 GET /lol/webhooks/events"""
+    return await _api_call("/lol/webhooks/events")
 
 
 # ═══════════════════════════════════════════════════
-#  类别 15 — Search（统一搜索）
-# ═══════════════════════════════════════════════════
-
-async def search(query: str, category: str = "") -> JsonResult:
-    """统一搜索 GET /lol/search?q=xxx&category=players|teams|tournaments|matches"""
-    params: dict[str, str] = {"q": query}
-    if category:
-        params["category"] = category
-    return await _api_call("/lol/search", params)
-
-
-async def fetch_autocomplete(query: str) -> JsonResult:
-    """自动补全 GET /lol/autocomplete?q=xxx"""
-    return await _api_call("/lol/autocomplete", {"q": query})
-
-
-# ═══════════════════════════════════════════════════
-#  类别 16 — Trending（热门趋势）
-# ═══════════════════════════════════════════════════
-
-async def fetch_trending() -> JsonResult:
-    """获取热门趋势 GET /lol/trending"""
-    return await _api_call("/lol/trending")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 17 — Static Data（静态数据）
-# ═══════════════════════════════════════════════════
-
-async def fetch_static_champions() -> JsonResult:
-    """获取所有英雄数据 GET /lol/static/champions"""
-    return await _api_call("/lol/static/champions")
-
-
-async def fetch_static_champion(champion_id: str) -> JsonResult:
-    """获取单个英雄静态数据 GET /lol/static/champions/{championId}"""
-    return await _api_call(f"/lol/static/champions/{champion_id}")
-
-
-async def fetch_static_items() -> JsonResult:
-    """获取所有装备数据 GET /lol/static/items"""
-    return await _api_call("/lol/static/items")
-
-
-async def fetch_static_patches() -> JsonResult:
-    """获取版本列表 GET /lol/static/patches"""
-    return await _api_call("/lol/static/patches")
-
-
-async def fetch_static_patch_current() -> JsonResult:
-    """获取当前版本信息 GET /lol/static/patches/current"""
-    return await _api_call("/lol/static/patches/current")
-
-
-async def fetch_static_regions() -> JsonResult:
-    """获取所有赛区 GET /lol/static/regions"""
-    return await _api_call("/lol/static/regions")
-
-
-async def fetch_static_roles() -> JsonResult:
-    """获取所有位置列表 GET /lol/static/roles"""
-    return await _api_call("/lol/static/roles")
-
-
-# ═══════════════════════════════════════════════════
-#  类别 18 — Records（记录/里程碑）
-# ═══════════════════════════════════════════════════
-
-async def fetch_records(category: str = "") -> JsonResult:
-    """获取赛事记录 GET /lol/records[/{category}]"""
-    if category:
-        return await _api_call(f"/lol/records/{category}")
-    return await _api_call("/lol/records")
-
-
-# ═══════════════════════════════════════════════════
-#  聚合查询（跨端点组合）
-# ═══════════════════════════════════════════════════
-
-async def fetch_team_full_profile(team_id: str) -> JsonResult:
-    """聚合获取战队完整画像（信息+阵容+统计+近期比赛）"""
-    results: dict[str, Any] = {}
-    endpoints = {
-        "info": f"/lol/teams/{team_id}",
-        "roster": f"/lol/teams/{team_id}/roster",
-        "stats": f"/lol/teams/{team_id}/stats",
-        "matches": f"/lol/teams/{team_id}/matches",
-    }
-    errors: list[str] = []
-    for key, path in endpoints.items():
-        data = await _request(path)
-        if "_error" in data:
-            errors.append(data["_error"])
-            results[key] = None
-        else:
-            results[key] = data
-    if errors and all(v is None for v in results.values()):
-        return Failure(error="; ".join(errors))
-    return Success(value=results)
-
-
-async def fetch_player_full_profile(player_id: str) -> JsonResult:
-    """聚合获取选手完整画像（信息+统计+生涯+英雄池）"""
-    results: dict[str, Any] = {}
-    endpoints = {
-        "info": f"/lol/players/{player_id}",
-        "stats": f"/lol/players/{player_id}/stats",
-        "career": f"/lol/players/{player_id}/stats/career",
-        "champions": f"/lol/players/{player_id}/champions",
-    }
-    errors: list[str] = []
-    for key, path in endpoints.items():
-        data = await _request(path)
-        if "_error" in data:
-            errors.append(data["_error"])
-            results[key] = None
-        else:
-            results[key] = data
-    if errors and all(v is None for v in results.values()):
-        return Failure(error="; ".join(errors))
-    return Success(value=results)
-
-
-async def fetch_tournament_full(tournament_id: str) -> JsonResult:
-    """聚合获取锦标赛全貌（信息+积分榜+对阵+MVP+排行榜）"""
-    slug = _resolve_tournament_slug(tournament_id)
-    results: dict[str, Any] = {}
-    endpoints = {
-        "info": f"/lol/tournaments/{slug}",
-        "standings": f"/lol/tournaments/{slug}/standings",
-        "bracket": f"/lol/tournaments/{slug}/bracket",
-        "mvp": f"/lol/tournaments/{slug}/mvp",
-        "leaderboards": f"/lol/tournaments/{slug}/stats",
-    }
-    errors: list[str] = []
-    for key, path in endpoints.items():
-        data = await _request(path)
-        if "_error" in data:
-            errors.append(data["_error"])
-            results[key] = None
-        else:
-            results[key] = data
-    if errors and all(v is None for v in results.values()):
-        return Failure(error="; ".join(errors))
-    return Success(value=results)
-
-
-# ═══════════════════════════════════════════════════
-#  辅助函数
-# ═══════════════════════════════════════════════════
-
-def _resolve_slug(user_league: str) -> str:
-    """将用户侧 league 转换为 citoapi 的 slug，未知则原样返回。"""
-    from ..utils import normalize_league
-    normalized = normalize_league(user_league)
-    if not normalized:
-        return user_league
-    return _LEAGUE_SLUGS.get(normalized, user_league)
-
-
-def _parse_match_event(ev: dict, league_slug: str) -> LeagueMatch | None:
-    """解析赛程事件为 LeagueMatch。"""
-    # 过滤非 match 类型事件
-    ev_type = ev.get("type", ev.get("eventType", ev.get("state", "")))
-    if ev_type and ev_type not in ("match", "in_progress", "completed", "unstarted", ""):
-        return None
-
-    m = ev.get("match", ev)
-    teams_raw = m.get("teams", ev.get("teams", []))
-    teams = [
-        t.get("name", t.get("code", t.get("team", {}).get("name", "?")))
-        for t in teams_raw
-    ] if isinstance(teams_raw, list) else []
-
-    start_time = ev.get("startTime", m.get("startTime", ev.get("start_time", "")))
-    dt = _parse_iso(start_time) if start_time else ("", "")
-
-    strategy = m.get("strategy", ev.get("strategy", {}))
-    bo = strategy.get("count", ev.get("bo", 0)) if strategy else 0
-
-    status = m.get("state", m.get("status", ev.get("state", ev.get("status", ""))))
-    arena = (
-        ev.get("blockName", "")
-        or ev.get("arena", "")
-        or (ev.get("league", {}) or {}).get("name", "")
-    )
-
-    # round: 优先使用 matchNumber / number / round，fallback 到 match id
-    round_val = (
-        str(m.get("number", m.get("matchNumber", m.get("round", ""))))
-        or str(ev.get("number", ev.get("matchNumber", ev.get("round", ""))))
-        or str(m.get("id", ev.get("id", "")))
-    )
-
-    # match_id: API 查找所需的真实 match id
-    match_id = str(
-        m.get("id", "")
-        or ev.get("matchId", "")
-        or ev.get("id", "")
-    )
-
-    return LeagueMatch(
-        league=league_slug.upper(),
-        stage=strategy.get("type", ev.get("stage", "regular")) if strategy else "regular",
-        round=round_val,
-        match_id=match_id,
-        match_name=" vs ".join(teams) if teams else ev.get("name", ev.get("match_name", "")),
-        bo_type=f"BO{bo}" if bo else "",
-        start_date=dt[0],
-        start_time=dt[1],
-        status=status,
-        arena=arena,
-        teams=teams,
-    )
-
-
-# ═══════════════════════════════════════════════════
-#  实时比赛 — GET /lol/live
+#  实时比赛解析 — GET /lol/live
 # ═══════════════════════════════════════════════════
 
 async def fetch_live_matches(league: str | None = None) -> LiveResult:
+    """获取所有正在进行的比赛（解析为 LiveMatch 列表）GET /lol/live"""
     data = await _request("/lol/live")
     if "_error" in data:
         return Failure(error=data["_error"])
@@ -1140,7 +549,6 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
             target_cito = _cito_slug(league.strip().lower())
             if target_cito and league_slug:
                 ls_lower = str(league_slug).lower()
-                # league_slug 可能是 "lck" 或 "lol-lck"，统一比较
                 target_short = target_cito.replace("lol-", "")
                 if ls_lower not in (target_short, target_cito):
                     continue
@@ -1182,8 +590,7 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
             match_id=str(m.get("id", ev.get("id", ""))),
             league=str(league_slug).lower() if league_slug else "",
             league_name=str(league_slug) if league_slug else "",
-            tournament_id=str(ev.get("tournamentId", ev.get("tournament", {}).get("id", ""))
-                              if isinstance(ev.get("tournament"), dict) else ""),
+            tournament_id="",
             match_name=" vs ".join(teams) if teams else ev.get("name", ""),
             teams=teams,
             score=f"{blue_wins}:{red_wins}",
@@ -1196,230 +603,76 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
 
 
 # ═══════════════════════════════════════════════════
-#  实时帧 — GET /lol/live/{gameId}/visual-state
+#  辅助函数
 # ═══════════════════════════════════════════════════
 
-async def fetch_live_frame(game_id: str, since: int = 0) -> LiveGameFrame | None:
-    endpoint = f"/lol/live/{game_id}/visual-state"
-    params: dict[str, Any] = {}
-    if since > 0:
-        params["startingTime"] = str(since)
+def _resolve_slug(user_league: str) -> str:
+    """将用户侧 league 转换为 citoapi 的 slug，未知则原样返回。"""
+    from ..utils import normalize_league
+    normalized = normalize_league(user_league)
+    if not normalized:
+        return user_league
+    return _LEAGUE_SLUGS.get(normalized, user_league)
 
-    try:
-        data = await _request(endpoint, params=params)
-        if "_error" in data:
-            return None
 
-        frames = data.get("frames", []) if isinstance(data, dict) else []
-        if not frames and isinstance(data, list):
-            frames = data[-1:]
-
-        latest = frames[-1] if frames else data
-        if not latest:
-            return None
-
-        game_state = latest.get("gameState", data.get("gameState", latest.get("state", "")))
-        blue = latest.get("blueTeam", data.get("blueTeam", {}))
-        red = latest.get("redTeam", data.get("redTeam", {}))
-
-        return LiveGameFrame(
-            game_id=game_id,
-            game_no=0,
-            state=game_state,
-            blue_team=blue.get("name", ""),
-            red_team=red.get("name", ""),
-            blue_kills=blue.get("totalKills", blue.get("kills", 0)),
-            red_kills=red.get("totalKills", red.get("kills", 0)),
-            blue_gold=blue.get("totalGold", blue.get("gold", 0)),
-            red_gold=red.get("totalGold", red.get("gold", 0)),
-            blue_towers=blue.get("towers", 0),
-            red_towers=red.get("towers", 0),
-            blue_barons=blue.get("barons", 0),
-            red_barons=red.get("barons", 0),
-            blue_drakes=blue.get("drakes", blue.get("dragons", 0)),
-            red_drakes=red.get("drakes", red.get("dragons", 0)),
-            blue_inhibitors=blue.get("inhibitors", 0),
-            red_inhibitors=red.get("inhibitors", 0),
-            game_time=latest.get("gameTime", data.get("gameTime", "")),
-            winner=data.get("winner", ""),
-        )
-    except Exception as e:
-        logger.debug(f"[citoapi] Frame error for {game_id}: {e}")
+def _parse_match_event(ev: dict, league_slug: str) -> LeagueMatch | None:
+    """解析赛程事件为 LeagueMatch。"""
+    ev_type = ev.get("type", ev.get("eventType", ev.get("state", "")))
+    if ev_type and ev_type not in ("match", "in_progress", "completed", "unstarted", ""):
         return None
 
+    m = ev.get("match", ev)
+    teams_raw = m.get("teams", ev.get("teams", []))
+    teams = [
+        t.get("name", t.get("code", t.get("team", {}).get("name", "?")))
+        for t in teams_raw
+    ] if isinstance(teams_raw, list) else []
 
-async def fetch_live_match_details(live_match: LiveMatch) -> LiveMatch:
-    updated_games: list[LiveGameFrame] = []
-    for game in live_match.games:
-        if game.state in ("in_progress", "in-progress", "live") and game.game_id:
-            frame = await fetch_live_frame(game.game_id)
-            if frame:
-                frame.game_no = game.game_no
-                updated_games.append(frame)
-            else:
-                updated_games.append(game)
-        else:
-            updated_games.append(game)
-    live_match.games = updated_games
-    return live_match
+    start_time = ev.get("startTime", m.get("startTime", ev.get("start_time", "")))
+    dt = _parse_iso(start_time) if start_time else ("", "")
 
+    strategy = m.get("strategy", ev.get("strategy", {}))
+    bo = strategy.get("count", ev.get("bo", 0)) if strategy else 0
 
-# ═══════════════════════════════════════════════════
-#  排名 — GET /lol/leagues/{slug}/standings
-# ═══════════════════════════════════════════════════
-
-async def fetch_standings(league: str = "lck") -> StandingsResult:
-    slug = (league or "").strip().lower()
-    cito = _cito_slug(slug)
-    if not cito:
-        return Failure(error=f"不支持的赛区: {slug}，可用: {supported_leagues()}")
-
-    data = await _request(f"/lol/leagues/{cito}/standings")
-    if "_error" in data:
-        return Failure(error=data["_error"])
-
-    # 多层次回退提取 standings 数据
-    standings_list = (data.get("standings") or 
-                      data.get("data", {}).get("standings") or 
-                      data.get("results") or 
-                      data.get("data"))
-    if isinstance(standings_list, dict):
-        standings_list = (standings_list.get("standings") or 
-                          standings_list.get("data") or 
-                          standings_list.get("results") or [standings_list])
-    if not standings_list and isinstance(data, list):
-        standings_list = data
-    if isinstance(standings_list, dict) and not standings_list.get("teams") and not standings_list.get("entries"):
-        # 可能是被包了一层，展开
-        standings_list = [standings_list]
-
-    entries: list[StandingEntry] = []
-    for group in (standings_list if isinstance(standings_list, list) else [standings_list]):
-        if not isinstance(group, dict):
-            continue
-        teams_in_group = group.get("teams", group.get("entries", group.get("results", [])))
-        if isinstance(teams_in_group, dict):
-            teams_in_group = teams_in_group.get("teams", teams_in_group.get("entries", []))
-        for team in (teams_in_group if isinstance(teams_in_group, list) else [teams_in_group]):
-            if not isinstance(team, dict):
-                continue
-            record = team.get("record", team.get("stats", {}))
-            entries.append(StandingEntry(
-                rank=team.get("rank", team.get("position", 0)),
-                team_name=team.get("name", team.get("code", team.get("team", "?"))),
-                wins=record.get("wins", record.get("win", 0)),
-                losses=record.get("losses", record.get("loss", 0)),
-                points=record.get("wins", record.get("points", record.get("win", 0))),
-                status=team.get("status", ""),
-            ))
-
-    return Success(value=entries)
-
-
-# ═══════════════════════════════════════════════════
-#  比赛详情 (含 BP) — GET /lol/matches/{matchId}
-# ═══════════════════════════════════════════════════
-
-async def fetch_match_detail(match_id: str) -> MatchDetail | None:
-    if not match_id:
-        return None
-
-    data = await _request(f"/lol/matches/{match_id}")
-    if "_error" in data:
-        logger.warning(f"[citoapi] match detail failed: {data['_error']}")
-        return None
-
-    # 尝试多种嵌套路径找到 event/match 数据
-    event = data.get("event", data.get("match", data))
-    if isinstance(event, list):
-        # API 可能返回列表，取第一个
-        event = event[0] if event else {}
-    if not isinstance(event, dict):
-        logger.debug(f"[citoapi] match detail unexpected type: {type(data)}")
-        return None
-
-    match_obj = event.get("match", event)
-    if isinstance(match_obj, list):
-        match_obj = match_obj[0] if match_obj else {}
-    if not isinstance(match_obj, dict):
-        match_obj = event
-
-    teams_raw = match_obj.get("teams", event.get("teams", []))
-    teams = [t.get("name", t.get("code", "?")) for t in teams_raw] if isinstance(teams_raw, list) else []
-
-    games: list[MatchGame] = []
-    for g in match_obj.get("games", event.get("games", [])):
-        game_teams = g.get("teams", [])
-        blue = _pick_side(game_teams, "blue")
-        red = _pick_side(game_teams, "red")
-
-        bp_entries: list[BPEntry] = []
-        for side_name, side_data in [("蓝方", blue), ("红方", red)]:
-            for ban in side_data.get("bans", []):
-                bp_entries.append(BPEntry(
-                    side=side_name,
-                    champion=ban.get("name", ban.get("championId", "")),
-                    player="(ban)",
-                    result="ban",
-                ))
-            for pick in side_data.get("picks", []):
-                bp_entries.append(BPEntry(
-                    side=side_name,
-                    champion=pick.get("name", pick.get("championId", "")),
-                    player=pick.get("playerId", pick.get("player", "")),
-                    result=pick.get("role", pick.get("position", "")),
-                ))
-
-        winner = (
-            "blue" if blue.get("result", {}).get("outcome") == "win"
-            else "red" if red.get("result", {}).get("outcome") == "win"
-            else ""
-        )
-        winner_name = (
-            blue.get("name", "") if winner == "blue"
-            else red.get("name", "") if winner == "red"
-            else ""
-        )
-
-        games.append(MatchGame(
-            game_no=g.get("number", g.get("gameNo", 0)),
-            blue_team=blue.get("name", blue.get("code", "蓝方")),
-            red_team=red.get("name", red.get("code", "红方")),
-            winner=winner_name,
-            duration=_format_duration(g.get("duration", g.get("gameDuration", 0))),
-            bp=bp_entries,
-        ))
-
-    tournament = event.get("tournament", {})
-    league_name = _extract_league_name(event, tournament)
-
-    return MatchDetail(
-        league=league_name,
-        stage=tournament.get("stage", event.get("stage", "regular")),
-        round=str(match_obj.get("id", event.get("id", match_id))),
-        match_name=" vs ".join(teams) if teams else event.get("name", ""),
-        summary=event.get("description", event.get("summary", "")),
-        games=games,
+    status = m.get("state", m.get("status", ev.get("state", ev.get("status", ""))))
+    arena = (
+        ev.get("blockName", "")
+        or ev.get("arena", "")
+        or (ev.get("league", {}) or {}).get("name", "")
     )
 
+    round_val = (
+        str(m.get("number", m.get("matchNumber", m.get("round", ""))))
+        or str(ev.get("number", ev.get("matchNumber", ev.get("round", ""))))
+        or str(m.get("id", ev.get("id", "")))
+    )
 
-def _extract_league_name(event: dict, tournament: dict) -> str:
-    league = tournament.get("league", tournament.get("leagueId", ""))
-    if isinstance(league, dict):
-        league = league.get("slug", league.get("name", league.get("id", "")))
-    if league:
-        return _user_slug_from_cito(str(league)) if "lol-" in str(league) else str(league).upper()
-    ev_league = event.get("league", event.get("leagueId", ""))
-    if isinstance(ev_league, dict):
-        ev_league = ev_league.get("slug", ev_league.get("name", ""))
-    return str(ev_league).upper() if ev_league else ""
+    match_id = str(
+        m.get("id", "")
+        or ev.get("matchId", "")
+        or ev.get("id", "")
+    )
+
+    return LeagueMatch(
+        league=league_slug.upper(),
+        stage=strategy.get("type", ev.get("stage", "regular")) if strategy else "regular",
+        round=round_val,
+        match_id=match_id,
+        match_name=" vs ".join(teams) if teams else ev.get("name", ev.get("match_name", "")),
+        bo_type=f"BO{bo}" if bo else "",
+        start_date=dt[0],
+        start_time=dt[1],
+        status=status,
+        arena=arena,
+        teams=teams,
+    )
 
 
 # ═══════════════════════════════════════════════════
 #  工具函数
 # ═══════════════════════════════════════════════════
 
-def _parse_iso(iso_str: str) -> tuple[str, str]:
+def _parse_iso(iso_str: str | int | float) -> tuple[str, str]:
     if not iso_str:
         return ("", "")
     try:
@@ -1451,5 +704,6 @@ def _format_duration(seconds: int) -> str:
         return ""
     m, s = divmod(int(seconds), 60)
     return f"{m}:{s:02d}"
-    m, s = divmod(int(seconds), 60)
-    return f"{m}:{s:02d}"
+
+
+

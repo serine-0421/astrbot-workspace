@@ -118,74 +118,11 @@ class LiveMatch:
 
 
 # ═══════════════════════════════════════════════════
-#  队伍 / 选手 / 锦标赛 / 排行榜
-# ═══════════════════════════════════════════════════
-
-@dataclass(slots=True)
-class TeamInfo:
-    team_id: str = ""
-    name: str = ""
-    code: str = ""
-    slug: str = ""
-    region: str = ""
-    league: str = ""
-    image: str = ""
-
-@dataclass(slots=True)
-class PlayerInfo:
-    player_id: str = ""
-    name: str = ""
-    handle: str = ""
-    role: str = ""
-    team: str = ""
-    nationality: str = ""
-    image: str = ""
-
-@dataclass(slots=True)
-class PlayerStats:
-    player_id: str = ""
-    name: str = ""
-    kda: str = ""
-    kills: float = 0.0
-    deaths: float = 0.0
-    assists: float = 0.0
-    cs_per_min: float = 0.0
-    kp: str = ""
-    games_played: int = 0
-
-@dataclass(slots=True)
-class ChampionStats:
-    champion: str = ""
-    games: int = 0
-    wins: int = 0
-    win_rate: str = ""
-    kda: str = ""
-
-@dataclass(slots=True)
-class TournamentInfo:
-    tournament_id: str = ""
-    name: str = ""
-    league: str = ""
-    season: str = ""
-    status: str = ""
-    start_date: str = ""
-    end_date: str = ""
-
-@dataclass(slots=True)
-class LeaderboardEntry:
-    rank: int = 0
-    player: str = ""
-    team: str = ""
-    value: str = ""
-
-
-# ═══════════════════════════════════════════════════
 #  类型别名
 # ═══════════════════════════════════════════════════
 
 ScheduleResult: TypeAlias = Success[list[LeagueMatch]] | Failure
 ResultResult: TypeAlias = Success[LeagueMatch] | Failure
-BpResult: TypeAlias = Success[LeagueMatch] | Failure
 DetailResult: TypeAlias = Success[MatchDetail] | Failure
 StandingsResult: TypeAlias = Success[list[StandingEntry]] | Failure
 LiveResult: TypeAlias = Success[list[LiveMatch]] | Failure

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 
 def normalize_league(value: str) -> str | None:
     lowered = (value or "").strip().lower()
@@ -31,11 +29,3 @@ def normalize_stage(value: str) -> str | None:
 
 def replace_side_mentions(text: str, team_a: str = "我方", team_b: str = "对方") -> str:
     return text.replace("我方", team_a).replace("对方", team_b).replace("蓝方", team_a).replace("红方", team_b)
-
-
-def ensure_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return value
-    return [value]
