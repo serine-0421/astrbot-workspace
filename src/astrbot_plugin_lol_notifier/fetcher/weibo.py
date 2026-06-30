@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from typing import Any
 
@@ -22,6 +23,10 @@ _USER_AGENT = (
 
 # HTML 标签清洗
 _TAG_RE = re.compile(r"<[^>]+>")
+
+# 微博 Cookie（硬编码，也可通过环境变量 WEIBO_COOKIE 覆盖）
+_DEFAULT_COOKIE: str = ""
+_WEIBO_COOKIE: str = _DEFAULT_COOKIE or os.environ.get("WEIBO_COOKIE", "")
 
 
 def _strip_html(text: str) -> str:

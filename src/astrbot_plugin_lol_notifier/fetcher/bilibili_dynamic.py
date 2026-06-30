@@ -22,8 +22,37 @@ _USER_AGENT = (
     "Chrome/125.0.0.0 Safari/537.36"
 )
 
-# B站 Cookie
-_bilibili_cookie: str = ""
+# B站 Cookie（硬编码，与 bilibili.py 共用）
+_DEFAULT_COOKIE: str = (
+    "buvid3=E8A25E15-F6A9-7B35-078E-FBDC9D92E5C579886infoc; "
+    "b_nut=1780047979; "
+    "_uuid=E15B659A-AE97-D52A-810103-A10B526DF9C6778210infoc; "
+    "buvid_fp=d4a60f9b5ae81fdb74e283e8891b0026; "
+    "buvid4=7EF8EA8B-65AC-50FE-EFC4-4E90EE26F2F780555-026052917-qsiivOz/4B9KKEExDhYE0Q%3D%3D; "
+    "DedeUserID=1078666620; "
+    "DedeUserID__ckMd5=365dbaf44efc77ac; "
+    "theme-tip-show=SHOWED; "
+    "theme-avatar-tip-show=SHOWED; "
+    "CURRENT_QUALITY=0; "
+    "rpdid=|(umYmmll)J~0J'u~)||lukJ~; "
+    "theme-switch-show=SHOWED; "
+    "CURRENT_FNVAL=2000; "
+    "bp_t_offset_1078666620=1214469777527930880; "
+    "bmg_af_switch=1; "
+    "bmg_src_def_domain=i2.hdslb.com; "
+    "bmg_af_sc={\"none\":{\"on\":1,\"def\":\"i2.hdslb.com\"},\"sgp\":{\"on\":1,\"def\":\"i2-sgp.hdslb.com\"}}; "
+    "bili_ticket=eyJhbGciOiJIUzI1NiIsImtpZCI6InMwMyIsInR5cCI6IkpXVCJ9."
+    "eyJleHAiOjE3ODMwNzE4MTUsImlhdCI6MTc4MjgxMjU1NSwicGx0IjotMX0."
+    "keuaYqkGg_rI4PGiC0uPcIMXIYzpUuuhYoWEBiHgtEw; "
+    "bili_ticket_expires=1783071755; "
+    "SESSDATA=ecab67ea%2C1798364616%2C82431%2A61CjCo49e9qpHmSccU9TV28XeGLbOcwjGjHVaplqzfliZ3ygJx_mMAcj6-5-VfqP5HfEwSVndXRUZJM0lyMldMMmhtMmxuQWNkeFl2WWJHeVBleEl6T2pybU96SmhTV2gxZDNNQk00TmVJMnpwa1g2NFBKZ3dxZ2xSYko4SFBSUzlQWWJNU0lEY1p3IIEC; "
+    "bili_jct=b2505b446532086ef41213f4b2bd9aa8; "
+    "sid=qburvfgk; "
+    "home_feed_column=4; "
+    "browser_resolution=1357-956; "
+    "b_lsid=BE586282_19F17EACF7F"
+)
+_bilibili_cookie: str = _DEFAULT_COOKIE or os.environ.get("BILIBILI_COOKIE", "")
 
 
 def set_bilibili_cookie(cookie: str) -> None:

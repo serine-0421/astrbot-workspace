@@ -22,13 +22,13 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ## 📖 命令参考
 
-所有命令以 `/lol` 开头。`[ ]` 表示可选参数，`< >` 表示必填参数。
+所有命令以 `/lol` 开头。`[ ]` 表示可选参数，`< >` 表示必填参数。**未指定赛区时默认使用 LPL**。
 
 ### 🔹 赛程 & 比赛
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol schedule [赛区] [stage] [season]` | 查询赛区完整赛程（默认最近 5 场） | `/lol schedule lpl` |
+| `/lol schedule [赛区] [stage] [season]` | 查询赛区赛程，按距今天最近排序（默认 LPL，最近 5 场） | `/lol schedule lpl` |
 | `/lol next [赛区] [stage] [season]` | 下一场未开赛的完整时间表 | `/lol next lck` |
 | `/lol today [赛区]` | 今日所有赛程 | `/lol today` `/lol today lpl` |
 | `/lol week [赛区]` | 本周所有赛程 | `/lol week` `/lol week lck` |
@@ -58,6 +58,13 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol transfers [赛区]` | 赛区转会动态 | `/lol transfers lck` |
 | `/lol transfers-player <选手ID>` | 选手转会历史 | `/lol transfers-player Faker` |
 | `/lol transfers-team <战队名>` | 战队转会记录 | `/lol transfers-team T1` |
+
+### 🔹 B站 / 微博
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol bilibili` | B站 LOL 官号最新 5 条视频 | `/lol bilibili` |
+| `/lol weibo` | 微博赛前海报最新 5 条 | `/lol weibo` |
 
 ### 🔹 其他查询
 
@@ -106,9 +113,9 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 来源 | 功能 | 触发方式 |
 |:--|:--|:--|
-| 🔔 B站 LOL 官号 | 官方视频投稿推送 | 订阅后自动 |
+| 🔔 B站 LOL 官号 | 官方视频投稿推送 + 手动查询 | 订阅自动 / `/lol bilibili` |
 | 🔵 B站 BLG 官号 | BP 图文动态推送 | 订阅后自动 |
-| 📰 微博 | LPL 赛前海报推送 | 订阅后自动 |
+| 📰 微博 | LPL 赛前海报推送 + 手动查询 | 订阅自动 / `/lol weibo` |
 
 ---
 
@@ -137,7 +144,8 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `bilibili_blg_uid` | `string` | `"545271146"` | BLG 官号 UID |
 | `enable_bilibili_blg_bp_push` | `bool` | `true` | 推送 BLG BP 图文动态 |
 | `bilibili_check_interval` | `int` | `60` | B站检查间隔（秒） |
-| `bilibili_cookie` | `string` | `""` | B站登录 Cookie（绕过风控）。也可设环境变量 `BILIBILI_COOKIE` |
+
+> B站 Cookie 已硬编码在 `bilibili.py` 中（`_DEFAULT_COOKIE`），也可通过环境变量 `BILIBILI_COOKIE` 覆盖。无需在 WebUI 中配置。
 
 ### 微博
 
@@ -146,7 +154,6 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `weibo_uids` | `list` | `["6537214902"]` | 微博监控账号 UID 列表 |
 | `enable_weibo_poster_push` | `bool` | `true` | 推送赛前海报 |
 | `weibo_check_interval` | `int` | `300` | 微博检查间隔（秒） |
-| `weibo_cookie` | `string` | `""` | 微博 Cookie |
 
 ---
 
@@ -154,7 +161,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ```
 astrbot_plugin_lol_notifier/
-├── main.py                     # AstrBot 插件入口（18 条命令）
+├── main.py                     # AstrBot 插件入口（20 条命令）
 ├── metadata.yaml               # 插件元数据
 ├── pyproject.toml              # 项目配置 & 依赖
 ├── _conf_schema.json           # 配置 Schema

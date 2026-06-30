@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -49,6 +49,8 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/125.0.0.0 Safari/537.36"
 )
+
+_BEIJING_TZ = timezone(timedelta(hours=8))  # UTC+8 北京时间
 
 # ── citoapi League slug 映射 ──
 _LEAGUE_SLUGS: dict[str, str] = {
@@ -602,6 +604,107 @@ async def fetch_live_matches(league: str | None = None) -> LiveResult:
     return Success(value=live_matches)
 
 
+async def fetch_live_match_details(live_match: LiveMatch) -> None:
+    """为 LiveMatch 补充实时比赛详情（游戏内状态 — 击杀/经济/塔/龙）。
+    
+    fetch_live_matches 已提供基础对局信息；此函数尝试获取 visualState 数据。
+    如果 API 不可用则静默跳过，不影响基础显示。
+    """
+    for game in live_match.games:
+        if not game.game_id:
+            continue
+        try:
+            result = await fetch_live_visual_state(game.game_id)
+            if result.ok and isinstance(result.value, dict):
+                vs = result.value
+                game.game_time = vs.get("gameTime", vs.get("game_time", ""))
+                # 双方数据常嵌套在 teams 数组中
+                vteams = vs.get("teams", [])
+                for vt in vteams:
+                    side = vt.get("side", "").lower()
+                    if side == "blue":
+                        game.blue_kills = vt.get("kills", 0)
+                        game.blue_gold = vt.get("gold", 0)
+                        game.blue_towers = vt.get("towers", 0)
+                        game.blue_barons = vt.get("barons", 0)
+                        game.blue_drakes = vt.get("dragons", vt.get("drakes", 0))
+                        game.blue_inhibitors = vt.get("inhibitors", 0)
+                    elif side == "red":
+                        game.red_kills = vt.get("kills", 0)
+                        game.red_gold = vt.get("gold", 0)
+                        game.red_towers = vt.get("towers", 0)
+                        game.red_barons = vt.get("barons", 0)
+                        game.red_drakes = vt.get("dragons", vt.get("drakes", 0))
+                        game.red_inhibitors = vt.get("inhibitors", 0)
+        except Exception:
+            pass
+
+
+def _parse_full_match_detail(data: dict, league_slug: str = "") -> MatchDetail:
+    """将 citoapi /lol/matches/{id} 返回的 JSON 解析为 MatchDetail。"""
+    from ..models import BPEntry
+
+    # 提取 match 层级（可能被嵌套在 "match" 或 "data" 键下）
+    m = data.get("match", data.get("data", data))
+    if isinstance(m, list):
+        m = m[0] if m else {}
+
+    games_raw = m.get("games", data.get("games", []))
+    if not isinstance(games_raw, list) and isinstance(m, dict):
+        games_raw = m.get("games", [])
+    games: list[MatchGame] = []
+    for g in games_raw:
+        gteams = g.get("teams", [])
+        blue = _pick_side(gteams, "blue")
+        red = _pick_side(gteams, "red")
+        winner_side = g.get("winner", g.get("winningTeam", ""))
+        if winner_side == "blue":
+            winner_name = blue.get("name", blue.get("code", ""))
+        elif winner_side == "red":
+            winner_name = red.get("name", red.get("code", ""))
+        else:
+            winner_name = str(winner_side) if winner_side else ""
+
+        # 解析 BP（picks/bans）
+        bp_list: list[BPEntry] = []
+        # citoapi 可能用 "picks" 或 "picksBans" 或 "bans"
+        for pick in g.get("picks", g.get("picksBans", g.get("bans", []))):
+            bp_list.append(BPEntry(
+                side=pick.get("side", ""),
+                champion=pick.get("champion", pick.get("championId", "")),
+                player=pick.get("player", pick.get("summonerName", "")),
+                result=pick.get("result", pick.get("won", "")),
+            ))
+
+        games.append(MatchGame(
+            game_no=g.get("number", g.get("gameNo", g.get("game_no", 0))),
+            blue_team=blue.get("name", blue.get("code", "蓝方")),
+            red_team=red.get("name", red.get("code", "红方")),
+            winner=winner_name,
+            duration=_format_duration(g.get("duration", g.get("gameLength", 0))),
+            bp=bp_list,
+        ))
+
+    # 提取 match name / teams
+    teams = m.get("teams", data.get("teams", []))
+    match_name = m.get("name", data.get("name", ""))
+    if not match_name and isinstance(teams, list) and len(teams) >= 2:
+        tnames = [
+            t.get("name", t.get("code", "?"))
+            for t in teams
+        ]
+        match_name = " vs ".join(tnames)
+
+    return MatchDetail(
+        league=league_slug.upper() if league_slug else str(m.get("league", data.get("league", ""))).upper(),
+        stage=m.get("stage", m.get("type", data.get("stage", ""))),
+        round=str(m.get("number", m.get("round", data.get("round", "")))),
+        match_name=match_name,
+        summary=m.get("summary", data.get("summary", "")),
+        games=games,
+    )
+
+
 # ═══════════════════════════════════════════════════
 #  辅助函数
 # ═══════════════════════════════════════════════════
@@ -673,18 +776,22 @@ def _parse_match_event(ev: dict, league_slug: str) -> LeagueMatch | None:
 # ═══════════════════════════════════════════════════
 
 def _parse_iso(iso_str: str | int | float) -> tuple[str, str]:
+    """将 citoapi 时间戳统一转为北京时间 (UTC+8) 的 (日期, 时间) 元组。"""
     if not iso_str:
         return ("", "")
     try:
         if isinstance(iso_str, (int, float)):
-            dt = datetime.fromtimestamp(iso_str)
+            # Unix 时间戳 → UTC → 北京时间
+            dt = datetime.fromtimestamp(iso_str, tz=timezone.utc)
         elif str(iso_str).isdigit():
             ts = int(iso_str)
-            dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts)
+            dt = datetime.fromtimestamp(ts / 1000 if ts > 1e12 else ts, tz=timezone.utc)
         else:
-            dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
-        local = dt.astimezone()
-        return (local.strftime("%Y-%m-%d"), local.strftime("%H:%M"))
+            # ISO 8601 字符串，citoapi 返回 UTC 时间
+            s = str(iso_str).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+        beijing = dt.astimezone(_BEIJING_TZ)
+        return (beijing.strftime("%Y-%m-%d"), beijing.strftime("%H:%M"))
     except Exception:
         return ("", "")
 

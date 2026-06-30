@@ -73,7 +73,7 @@ async def close_session() -> None:
 # ── 赛程 ──
 
 async def get_schedule(
-    league: str = "lck", stage: str = "regular", season: int | str = "current"
+    league: str = "lpl", stage: str = "regular", season: int | str = "current"
 ) -> ScheduleResult:
     league_n = normalize_league(league)
     if league_n is None:
@@ -102,7 +102,7 @@ async def get_schedule(
 # ── 比赛结果 ──
 
 async def get_match_result(
-    league: str = "lck",
+    league: str = "lpl",
     stage: str = "regular",
     round_number: int | str = "last",
     season: int | str = "current",
@@ -141,7 +141,7 @@ async def get_match_result(
 # ── 比赛详情 ──
 
 async def get_match_detail(
-    league: str = "lck",
+    league: str = "lpl",
     stage: str = "regular",
     round_number: int | str = "last",
     season: int | str = "current",
@@ -150,13 +150,13 @@ async def get_match_detail(
     if league_n is None:
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
-    from .lolesports import fetch_match_info, fetch_schedule
+    from .lolesports import _parse_full_match_detail, fetch_match_info, fetch_schedule
 
     rn_str = str(round_number)
     if rn_str.isdigit() and len(rn_str) >= 12:
         detail = await fetch_match_info(rn_str)
-        if detail.ok:
-            return detail
+        if detail.ok and isinstance(detail.value, dict):
+            return Success(value=_parse_full_match_detail(detail.value, league_n))
         return Failure(error=f"未找到比赛 {rn_str} 的详细信息。")
 
     sched = await fetch_schedule(league=league_n)
@@ -171,13 +171,16 @@ async def get_match_detail(
         return Failure(error="未找到对应比赛。")
 
     match_lookup_id = target.match_id or target.round
-    return await fetch_match_info(match_lookup_id)
+    detail = await fetch_match_info(match_lookup_id)
+    if detail.ok and isinstance(detail.value, dict):
+        return Success(value=_parse_full_match_detail(detail.value, league_n))
+    return detail
 
 
 # ── 排名 / 积分榜 ──
 
 async def get_standings(
-    league: str = "lck", stage: str = "regular", season: int | str = "current"
+    league: str = "lpl", stage: str = "regular", season: int | str = "current"
 ) -> StandingsResult:
     league_n = normalize_league(league)
     if league_n is None:
@@ -209,7 +212,7 @@ async def get_today_schedule(league: str = "") -> JsonResult:
     if cached is not None:
         return cached
     from .lolesports import fetch_schedule
-    result = await fetch_schedule(league=ln or "lck")
+    result = await fetch_schedule(league=ln or "lpl")
     if result.ok and result.value:
         today = _date_today()
         filtered = [m for m in result.value if m.start_date == today]
@@ -230,7 +233,7 @@ async def get_week_schedule(league: str = "") -> JsonResult:
     if cached is not None:
         return cached
     from .lolesports import fetch_schedule
-    result = await fetch_schedule(league=ln or "lck")
+    result = await fetch_schedule(league=ln or "lpl")
     if result.ok and result.value:
         start, end = _date_week_range()
         filtered = [m for m in result.value if start <= m.start_date <= end]

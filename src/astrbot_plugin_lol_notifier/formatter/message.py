@@ -11,11 +11,19 @@ from ..utils import replace_side_mentions
 def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     if not matches:
         return "📅 暂无比赛安排。"
-    # 按日期降序排列（最近的在前面）
-    def _sort_key(m: LeagueMatch):
-        d = (m.start_date or "") + (m.start_time or "")
-        return d if d else "0000"
-    sorted_matches = sorted(matches, key=_sort_key, reverse=True)
+    # 按日期距今天的绝对距离排序——最近的比赛优先
+    from datetime import date, datetime
+    today = date.today()
+    def _proximity_key(m: LeagueMatch) -> tuple:
+        try:
+            d = datetime.strptime(m.start_date or "1970-01-01", "%Y-%m-%d").date()
+            delta = abs((d - today).days)
+            # 未来比赛优先于过去比赛（同天时）
+            future_bonus = 0 if d >= today else 1
+            return (delta, future_bonus)
+        except ValueError:
+            return (9999, 0)
+    sorted_matches = sorted(matches, key=_proximity_key)
     lines = ["📅 LoL 近期赛程（最近优先）\n"]
     for match in sorted_matches[:limit]:
         teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
@@ -49,7 +57,7 @@ def format_match_result(match: LeagueMatch) -> str:
     return "\n".join(lines)
 
 
-def format_match_bp(match: LeagueMatch) -> str:
+def format_match_bp(match: LeagueMatch | MatchDetail) -> str:
     if not match.games:
         return "⏳ BP 数据暂未公布，请稍后再试。"
     lines = [

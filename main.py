@@ -38,7 +38,10 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
 
 from .src.astrbot_plugin_lol_notifier.fetcher import api
+from .src.astrbot_plugin_lol_notifier.fetcher import bilibili as bili_fetcher
+from .src.astrbot_plugin_lol_notifier.fetcher import weibo as weibo_fetcher
 from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import get_api_key, set_api_key
+from .src.astrbot_plugin_lol_notifier.config import get_weibo_uids
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
 from .src.astrbot_plugin_lol_notifier.models import Failure, Success
@@ -48,7 +51,7 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
 
 ━━━ 比赛查询 ━━━
   /lol schedule [league] [regular|playoff] [season]
-      近期赛程（默认最近 5 场）
+      近期赛程（默认 LPL，最近 5 场）
   /lol next [league] [regular|playoff] [season]
       下一场完整时间表
   /lol live [league]
@@ -66,31 +69,22 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol week [league]
       本周赛程
 
-━━━ 战队 ━━━
-  /lol team info <name>           战队完整信息（自动搜索匹配）
-  /lol team h2h <team_a> <team_b> 两队交手记录
-
-━━━ 选手 ━━━
-  /lol player info <name>           选手信息（自动搜索匹配）
+━━━ 战队 / 选手 ━━━
+  /lol team info [name]          战队信息（可按名称筛选）
   /lol player stats <player_id>      选手统计数据
-  /lol player champions <player_id>  选手英雄池
+  /lol player earnings <player_id>   选手生涯奖金
 
-━━━ 世界赛 ━━━
-  /lol tournament info <id>            世界赛信息
-  /lol tournament standings <id>       世界赛积分榜
-  /lol tournament bracket <id>         淘汰赛对阵
-  /lol tournament mvp <id>             世界赛 MVP
+━━━ 转会 ━━━
+  /lol transfers [league]            赛区转会动态
+  /lol transfers-player <player_id>  选手转会历史
+  /lol transfers-team <team>         战队转会记录
 
-━━━ 英雄 / 数据 ━━━
-  /lol champion stats [league]         英雄统计 (⚠️ API 可能不可用)
-  /lol champion presence [league]      英雄 Pick/Ban 率
-  /lol ranking gpr                     全球战力排名 (⚠️ API 可能不可用)
-  /lol ranking players <metric>        选手排名
-  /lol leaderboard <metric> [league]   数据排行榜
-  /lol trending                        热门趋势
-  /lol history worlds|msi              历史赛事 (⚠️ 数据可能不完整)
-  /lol transfers [league]              转会信息 (⚠️ 数据可能不完整)
-  /lol records [league]                赛事记录
+━━━ B站 / 微博 ━━━
+  /lol bilibili                      B站 LOL官号最新 5 条视频
+  /lol weibo                         微博赛前海报最新 5 条
+
+━━━ 其他 ━━━
+  /lol coverage                      直播覆盖矩阵
 
 ━━━ 赛区 ━━━
   lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
@@ -179,11 +173,11 @@ class LoLNotifierPlugin(Star):
     async def lol_schedule(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         season: str = "current",
     ):
-        """查看赛程（LCK / LPL，常规赛 / 淘汰赛）"""
+        """查看赛程。默认 LPL 赛区，可选 stage (regular|playoff)、season。"""
         result = await api.get_schedule(league, stage, season)
         async for message in self._render_query_result(
             event,
@@ -200,11 +194,11 @@ class LoLNotifierPlugin(Star):
     async def lol_next(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         season: str = "current",
     ):
-        """查看下一场完整时间表（仅显示未开始的比赛）"""
+        """查看下一场完整时间表（仅显示未开始的比赛）。默认 LPL 赛区。"""
         result = await api.get_schedule(league, stage, season)
         match result:
             case Success(value=schedule) if schedule:
@@ -346,7 +340,7 @@ class LoLNotifierPlugin(Star):
     async def lol_result(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         round_num: str = "last",
     ):
@@ -385,7 +379,7 @@ class LoLNotifierPlugin(Star):
     async def lol_bp(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         round_num: str = "last",
     ):
@@ -424,7 +418,7 @@ class LoLNotifierPlugin(Star):
     async def lol_detail(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         round_num: str = "last",
     ):
@@ -465,7 +459,7 @@ class LoLNotifierPlugin(Star):
     async def lol_standings(
         self,
         event: AstrMessageEvent,
-        league: str = "lck",
+        league: str = "lpl",
         stage: str = "regular",
         season: str = "current",
     ):
@@ -723,3 +717,50 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result(fmt.format_coverage(data))
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
+
+    # ──────────────── B站 官号视频查询 ────────────────
+
+    @filter.command("lol bilibili")
+    async def lol_bilibili(self, event: AstrMessageEvent):
+        """查询 B 站 LOL 官号最新 5 条视频。"""
+        items = await bili_fetcher.fetch_bilibili_updates()
+        if not items:
+            yield event.plain_result("📺 B站 LOL官号暂无可显示的视频。")
+            return
+        latest = items[:5]
+        yield event.plain_result(fmt.format_bilibili_update(latest))
+
+    # ──────────────── 微博赛前海报查询 ────────────────
+
+    @filter.command("lol weibo")
+    async def lol_weibo(self, event: AstrMessageEvent):
+        """查询微博赛前海报最新 5 条。"""
+        try:
+            uid_list = get_weibo_uids(self._config)
+            items = await weibo_fetcher.fetch_weibo_posters(uid_list)
+        except Exception as e:
+            yield event.plain_result(f"❌ 微博查询失败: {e}")
+            return
+        if not items:
+            yield event.plain_result("📢 暂未发现相关赛前海报。")
+            return
+        latest = items[:5]
+        yield event.plain_result(fmt.format_weibo_poster(latest))
+
+    # ──────────────── 未知子指令兜底 ────────────────
+
+    _KNOWN_SUB_COMMANDS: set[str] = {
+        "help", "schedule", "next", "live", "result", "bp", "detail",
+        "standings", "today", "week", "team", "player", "transfers",
+        "transfers-player", "transfers-team", "coverage", "bilibili", "weibo",
+        "subscribe", "unsubscribe", "apikey", "test",
+    }
+
+    @filter.regex(r"^/lol\s+\S")
+    async def lol_fallback(self, event: AstrMessageEvent):
+        """捕获 /lol 下未识别的子指令，提示并返回帮助。"""
+        message = event.message_str.strip()
+        sub_cmd = message.split(maxsplit=1)[1].split()[0]
+
+        if sub_cmd not in self._KNOWN_SUB_COMMANDS:
+            yield event.plain_result(f"❌ 该命令不存在：/lol {sub_cmd}\n\n{HELP_TEXT}")
