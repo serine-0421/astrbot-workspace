@@ -5,6 +5,45 @@ LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / W
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
 > 📡 数据来源：[PandaScore](https://pandascore.co)（主） + [citoapi](https://api.citoapi.com/api/v1/lol)（备用）
 
+### 🔄 数据流架构
+
+```mermaid
+flowchart LR
+    CMD["/lol 命令"] --> API["api.py<br/>统一入口"]
+    API --> PS["PandaScore<br/>Bearer Token"]
+    API --> CITO["citoapi<br/>x-api-key"]
+    PS -->|成功| RESULT["返回结果"]
+    PS -->|失败| CITO
+    CITO --> RESULT
+
+    subgraph Pandascore 覆盖
+        PS_S["schedule / next"]
+        PS_L["live（实时比赛）"]
+        PS_R["result / detail"]
+        PS_ST["standings"]
+        PS_T["today / teams / leagues"]
+    end
+
+    subgraph citoapi 独有
+        C_BP["bp 阵容"]
+        C_TR["transfers 转会"]
+        C_CV["coverage 直播"]
+        C_PL["player stats / earnings"]
+    end
+```
+
+| 功能 | 主数据源 | 回退 |
+|:--|:--|:--|
+| 赛程/下一场/今日 | PandaScore `GET /lol/matches` | citoapi |
+| 实时比赛 `/lol live` | PandaScore `GET /lol/matches/running` ⚡ | citoapi |
+| 比赛结果/详情 | PandaScore `GET /lol/matches/past` + `/{id}` | citoapi |
+| 积分榜 `/lol standings` | PandaScore `GET /lol/tournaments/{id}/standings` | citoapi |
+| 战队列表 `/lol team info` | PandaScore `GET /lol/teams` | citoapi |
+| BP 阵容 `/lol bp` | — | citoapi 独有 |
+| 转会 `/lol transfers` | — | citoapi 独有 |
+| 直播覆盖 `/lol coverage` | — | citoapi 独有 |
+| 选手统计/奖金 | — | citoapi 独有 |
+
 ---
 
 ## 📦 安装
