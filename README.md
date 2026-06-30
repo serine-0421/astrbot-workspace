@@ -231,34 +231,6 @@ AstrBot 消息通道（QQ / Telegram / WebChat）
 
 ---
 
-## ❓ FAQ
-
-**Q: 支持哪些赛区？**
-A: 14 个：LCK、LPL、LEC、LCS、LCO、LCL、LJL、PCS、VCS、CBLOL、LLA、TCL、MSI、Worlds。
-
-**Q: 需要配置 API Key 吗？**
-A: 不需要。插件内置了可用 Key，安装即用。如果想使用自己的 Key 获得更稳定服务，可通过 `/lol apikey <你的key>` 设置，或在配置面板填写 `cito_api_key`。
-
-**Q: `/lol live` 返回"没有正在进行的比赛"？**
-A: 仅在比赛进行中才有实时数据。请确认当前是否有 League 正在比赛。
-
-**Q: 如何获取选手 ID？**
-A: 直接使用选手的游戏名即可（如 `Faker`、`Chovy`、`ShowMaker`）。API 支持模糊匹配。
-
-**Q: 如何获取战队名？**
-A: 使用 `/lol team info` 查看所有战队列表，或用 `/lol team info <关键词>` 筛选（如 `T1`、`BLG`）。
-
-**Q: 只想自动推送，不想手动查？**
-A: 执行 `/lol subscribe`，调度器在后台自动推送赛程、B站视频和微博海报，无需主动查询。
-
-**Q: 图片模式和文本模式有什么区别？**
-A: 文本模式直接输出纯文本消息，响应快。图片模式将数据渲染为 HTML 再转图片，视觉效果更好但需要 Pillow 和字体/模板支持。在配置面板中设置 `enable_image_render` 切换。
-
-**Q: 数据来源可靠吗？**
-A: 赛事数据来自 citoapi (`https://api.citoapi.com/api/v1/lol`)，B站/微博来自平台公开接口。
-
----
-
 ## ⚠️ 已知限制 (Known Limitations)
 
 以下功能依赖 citoapi 的特定端点，可能因 API 覆盖范围或不支持而返回空数据：
