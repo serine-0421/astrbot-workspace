@@ -3,7 +3,7 @@
 LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、转会动态与直播覆盖矩阵。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
-> 📡 数据来源：[citoapi](https://api.citoapi.com/api/v1) — 仅使用官方文档已记录的端点。
+> 📡 数据来源：[citoapi](https://api.citoapi.com/api/v1/lol) — 仅使用官方文档已记录的端点。
 
 ---
 
