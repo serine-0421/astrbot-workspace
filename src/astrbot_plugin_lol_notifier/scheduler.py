@@ -26,7 +26,7 @@ from astrbot.api.message_components import Image, Plain
 from . import image_renderer as img
 from .config import get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
 from .fetcher import api as fetcher_api
-from .fetcher import bilibili, bilibili_dynamic, lolesports, weibo
+from .fetcher import bilibili, bilibili_dynamic, weibo
 from .formatter import message as formatter
 from .models import Failure, LeagueMatch, LiveMatch, Success
 from .state import NotificationState, default_state
@@ -492,7 +492,7 @@ class LoLScheduler:
     async def _check_live_matches(self) -> None:
         """实时比赛轮询：检测正在进行中的比赛，有比分变化时推送"""
         try:
-            result = await lolesports.fetch_live_matches()
+            result = await api.get_live_matches()
             if not result.ok or not result.value:
                 return
 
@@ -502,9 +502,6 @@ class LoLScheduler:
                 active_games = [g for g in lm.games if g.state == "in_progress"]
                 if not active_games:
                     continue
-
-                # 获取详细帧数据
-                await lolesports.fetch_live_match_details(lm)
 
                 # 构建状态键
                 match_key = lm.match_id or f"{lm.league}_{lm.match_name}"

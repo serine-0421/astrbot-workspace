@@ -1,7 +1,7 @@
 name: astrbot_plugin_lol_notifier
 display_name: LoL Notifier
-desc: 40+ API 端点 × 19 条指令 — LoL 电竞一站式查询（赛程/实时/BP/排名/战队/选手/转会/直播覆盖/B站/微博） + 自动推送
-version: v1.2.1
+desc: 40+ API 端点 × 19 条指令 — PandaScore 主数据源 + citoapi 备用，LoL 电竞一站式查询（赛程/实时/BP/排名/战队/选手/转会/直播覆盖/B站/微博） + 自动推送
+version: v1.3.0
 author: MareDevi
 repo: https://github.com/MareDevi/astrbot_plugin_lol_notifier
 pip:

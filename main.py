@@ -1,6 +1,7 @@
 """AstrBot plugin: LoL Notifier
 
 Provides LoL esports push notifications and on-demand query commands.
+Data: PandaScore (primary) + citoapi (fallback).
 
 Commands (prefix /lol):
     /lol help
@@ -49,6 +50,7 @@ from .src.astrbot_plugin_lol_notifier.models import Failure, Success
 from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 
 HELP_TEXT = """🎮 LoL Notifier 指令列表
+📡 数据: PandaScore + citoapi
 
 ━━━ 比赛查询 ━━━
   /lol schedule [league] [regular|playoff] [season]
@@ -393,15 +395,10 @@ class LoLNotifierPlugin(Star):
         return None
 
     async def _handle_live(self, event, league):
-        from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import (
-            fetch_live_match_details, fetch_live_matches,
-        )
         from .src.astrbot_plugin_lol_notifier.formatter.message import format_live_match
-        result = await fetch_live_matches(league if league else None)
+        result = await api.get_live_matches(league)
         match result:
             case Success(value=detailed) if detailed:
-                for lm in detailed:
-                    await fetch_live_match_details(lm)
                 lines_parts = [format_live_match(lm) for lm in detailed]
                 yield event.plain_result("\n\n".join(lines_parts))
             case Success():
