@@ -449,15 +449,35 @@ def format_transfers_team(data: dict) -> str:
         if isinstance(t, str):
             lines.append(f"  {t}")
             continue
-        player = t.get("player", t.get("name", ""))
+        # 选手名 — 尝试多个可能的字段名
+        player = t.get("player", t.get("name", t.get("handle", "")))
         if isinstance(player, dict):
-            player = player.get("name", player.get("handle", "?"))
-        direction = t.get("direction", t.get("type", ""))  # in/out
-        team = t.get("team", t.get("from", t.get("to", "")))
+            player = (
+                player.get("name")
+                or player.get("handle")
+                or player.get("summonerName")
+                or player.get("nickname")
+                or player.get("id")
+                or "?"
+            )
+        if isinstance(player, list) and player:
+            p0 = player[0]
+            if isinstance(p0, dict):
+                player = p0.get("name", p0.get("handle", "?"))
+            else:
+                player = str(p0)
+        if not player or not str(player).strip():
+            player = "?"
+        # 方向
+        direction = t.get("direction", t.get("type", t.get("transferType", "")))
+        dir_lower = str(direction).lower() if direction else ""
+        icon = "🔴 离队" if dir_lower in ("out", "leave", "sell", "departure") else "🟢 入队"
+        # 队伍
+        team = t.get("team", t.get("from", t.get("to", t.get("teamName", ""))))
         if isinstance(team, dict):
-            team = team.get("name", team.get("code", ""))
-        date = t.get("date", t.get("season", t.get("year", "")))
-        icon = "🔴 离队" if direction and direction.lower() in ("out", "leave", "sell") else "🟢 入队"
+            team = team.get("name", team.get("code", team.get("slug", "")))
+        # 日期
+        date = t.get("date", t.get("season", t.get("year", t.get("transferDate", ""))))
         line = f"  {icon}: {player}"
         if team:
             line += f"  [{team}]"

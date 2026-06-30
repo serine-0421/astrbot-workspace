@@ -31,7 +31,6 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol schedule [赛区] [stage] [season]` | 查询赛区赛程，按距今天最近排序（默认 LPL，最近 5 场） | `/lol schedule lpl` |
 | `/lol next [赛区] [stage] [season]` | 下一场未开赛的完整时间表 | `/lol next lck` |
 | `/lol today [赛区]` | 今日所有赛程 | `/lol today` `/lol today lpl` |
-| `/lol week [赛区]` | 本周所有赛程 | `/lol week` `/lol week lck` |
 | `/lol live [赛区]` | 正在进行的实时比赛（击杀/经济/塔/龙） | `/lol live` `/lol live lck` |
 | `/lol result [赛区] [stage] [round]` | 比赛结果（默认最近一场） | `/lol result lpl` `/lol result lck playoff 3` |
 | `/lol bp [赛区] [stage] [round]` | 比赛 BP 阵容详情（默认最近一场） | `/lol bp lck` `/lol bp lpl regular 2` |
@@ -161,7 +160,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ```
 astrbot_plugin_lol_notifier/
-├── main.py                     # AstrBot 插件入口（20 条命令）
+├── main.py                     # AstrBot 插件入口（19 条命令）
 ├── metadata.yaml               # 插件元数据
 ├── pyproject.toml              # 项目配置 & 依赖
 ├── _conf_schema.json           # 配置 Schema
