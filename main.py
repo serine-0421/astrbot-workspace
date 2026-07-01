@@ -9,17 +9,10 @@ Commands (prefix /lol):
     /lol next [league] [regular|playoff] [season]
     /lol live [league]
     /lol result [league] [regular|playoff] [round]
-    /lol bp [league] [regular|playoff] [round]
     /lol detail [league] [regular|playoff] [round]
     /lol standings [league] [regular|playoff] [season]
     /lol today [league]
     /lol team info [team_name]
-    /lol player stats <player_id>
-    /lol player earnings <player_id>
-    /lol transfers [league]
-    /lol transfers-player <player_id>
-    /lol transfers-team <team_slug>
-    /lol coverage
     /lol bilibili
     /lol weibo
     /lol subscribe
@@ -61,8 +54,6 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
       正在进行的实时比赛
   /lol result [league] [regular|playoff] [round]
       比赛结果（默认最近一场）
-  /lol bp [league] [regular|playoff] [round]
-      单局 BP（默认最近一场）
   /lol detail [league] [regular|playoff] [round]
       比赛详细信息
   /lol standings [league] [regular|playoff] [season]
@@ -70,22 +61,12 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol today [league]
       今日赛程
 
-━━━ 战队 / 选手 ━━━
+━━━ 战队 ━━━
   /lol team info [name]          战队信息（可按名称筛选）
-  /lol player stats <player_id>      选手统计数据
-  /lol player earnings <player_id>   选手生涯奖金
-
-━━━ 转会 ━━━
-  /lol transfers [league]            赛区转会动态
-  /lol transfers-player <player_id>  选手转会历史
-  /lol transfers-team <team>         战队转会记录
 
 ━━━ B站 / 微博 ━━━
   /lol bilibili                      B站 LOL官号最新 5 条视频
   /lol weibo                         微博赛前海报最新 5 条
-
-━━━ 其他 ━━━
-  /lol coverage                      直播覆盖矩阵
 
 ━━━ 赛区 ━━━
   lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
@@ -207,13 +188,6 @@ class LoLNotifierPlugin(Star):
                 async for m in _result(self._handle_result(event, league, stage, round_num)):
                     yield m
 
-            elif sub_cmd == "bp":
-                league = args[0] if len(args) > 0 else "lpl"
-                stage = args[1] if len(args) > 1 else "regular"
-                round_num = args[2] if len(args) > 2 else "last"
-                async for m in _result(self._handle_bp(event, league, stage, round_num)):
-                    yield m
-
             elif sub_cmd == "detail":
                 league = args[0] if len(args) > 0 else "lpl"
                 stage = args[1] if len(args) > 1 else "regular"
@@ -241,37 +215,6 @@ class LoLNotifierPlugin(Star):
                         yield m
                 else:
                     yield event.plain_result(f"❌ 未知战队子命令: /lol team {sub2}\n\n{HELP_TEXT}")
-
-            elif sub_cmd == "player":
-                sub2 = args[0].lower() if len(args) > 0 else ""
-                pid = args[1] if len(args) > 1 else ""
-                if sub2 == "stats":
-                    async for m in _result(self._handle_player_stats(event, pid)):
-                        yield m
-                elif sub2 == "earnings":
-                    async for m in _result(self._handle_player_earnings(event, pid)):
-                        yield m
-                else:
-                    yield event.plain_result(f"❌ 未知选手子命令: /lol player {sub2}\n\n{HELP_TEXT}")
-
-            elif sub_cmd == "transfers":
-                league = args[0] if len(args) > 0 else ""
-                async for m in _result(self._handle_transfers(event, league)):
-                    yield m
-
-            elif sub_cmd == "transfers-player":
-                pid = args[0] if len(args) > 0 else ""
-                async for m in _result(self._handle_transfers_player(event, pid)):
-                    yield m
-
-            elif sub_cmd == "transfers-team":
-                team = args[0] if len(args) > 0 else ""
-                async for m in _result(self._handle_transfers_team(event, team)):
-                    yield m
-
-            elif sub_cmd == "coverage":
-                async for m in _result(self._handle_coverage(event)):
-                    yield m
 
             elif sub_cmd == "subscribe":
                 async for m in _result(self._handle_subscribe(event)):
@@ -432,32 +375,6 @@ class LoLNotifierPlugin(Star):
         ):
             yield msg
 
-    async def _handle_bp(self, event, league, stage, round_num):
-        round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
-        result = await api.get_match_detail(league, stage, round_arg)
-        if result.ok and result.value and result.value.games:
-            async for msg in self._render_query_result(
-                event, result,
-                has_payload=lambda v: bool(v.games),
-                render_text=lambda v: fmt.format_match_bp(v),
-                render_image=lambda v: img.render_match_bp(v),
-                empty_text="⏳ 比赛数据暂未公布，请稍后再试。",
-                error_prefix="/lol bp error",
-            ):
-                yield msg
-            return
-        basic = await api.get_match_result(league, stage, round_arg)
-        if basic.ok and basic.value:
-            yield event.plain_result(fmt.format_match_basic(basic.value))
-            return
-        async for msg in self._render_query_result(
-            event, Success(value=None),
-            has_payload=lambda v: False, render_text=lambda v: "", render_image=lambda v: "",
-            empty_text="⏳ 比赛数据暂未公布，请稍后再试。",
-            error_prefix="/lol bp error",
-        ):
-            yield msg
-
     async def _handle_detail(self, event, league, stage, round_num):
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
         result = await api.get_match_detail(league, stage, round_arg)
@@ -522,66 +439,6 @@ class LoLNotifierPlugin(Star):
                         yield event.plain_result(fmt.format_team_info({"teams": data}))
                 else:
                     yield event.plain_result(fmt.format_team_info(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_player_stats(self, event, player_id):
-        if not player_id.strip():
-            yield event.plain_result("请提供选手 ID。如: /lol player stats Faker")
-            return
-        result = await api.get_player_stats(player_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_player_stats(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_player_earnings(self, event, player_id):
-        if not player_id.strip():
-            yield event.plain_result("请提供选手 ID。如: /lol player earnings Faker")
-            return
-        result = await api.get_player_earnings_summary(player_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_player_earnings(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_transfers(self, event, league):
-        result = await api.get_transfers(league)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_transfers(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_transfers_player(self, event, player_id):
-        if not player_id.strip():
-            yield event.plain_result("请提供选手 ID。如: /lol transfers-player Faker")
-            return
-        result = await api.get_transfers_player(player_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_transfers_player(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_transfers_team(self, event, team_slug):
-        if not team_slug.strip():
-            yield event.plain_result("请提供战队名。如: /lol transfers-team T1")
-            return
-        result = await api.get_transfers_team(team_slug)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_transfers_team(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_coverage(self, event):
-        result = await api.get_coverage()
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_coverage(data))
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 

@@ -39,10 +39,6 @@ flowchart LR
 | 比赛结果/详情 | PandaScore `GET /lol/matches/past` + `/{id}` | citoapi |
 | 积分榜 `/lol standings` | PandaScore `GET /lol/tournaments/{id}/standings` | citoapi |
 | 战队列表 `/lol team info` | PandaScore `GET /lol/teams` | citoapi |
-| BP 阵容 `/lol bp` | — | citoapi 独有 |
-| 转会 `/lol transfers` | — | citoapi 独有 |
-| 直播覆盖 `/lol coverage` | — | citoapi 独有 |
-| 选手统计/奖金 | — | citoapi 独有 |
 
 ---
 
@@ -72,7 +68,6 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol today [赛区]` | 今日所有赛程 | `/lol today` `/lol today lpl` |
 | `/lol live [赛区]` | 正在进行的实时比赛（击杀/经济/塔/龙） | `/lol live` `/lol live lck` |
 | `/lol result [赛区] [stage] [round]` | 比赛结果（默认最近一场） | `/lol result lpl` `/lol result lck playoff 3` |
-| `/lol bp [赛区] [stage] [round]` | 比赛 BP 阵容详情（默认最近一场） | `/lol bp lck` `/lol bp lpl regular 2` |
 | `/lol detail [赛区] [stage] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
 | `/lol standings [赛区] [stage] [season]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
 
@@ -82,33 +77,12 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 |:--|:--|:--|
 | `info [战队名]` | 查看所有战队，或按名称筛选 | `/lol team info` `/lol team info T1` |
 
-### 🔹 选手 — `/lol player`
-
-| 子命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `stats <选手ID>` | 赛季统计数据（KDA/击杀/死亡/助攻/补刀等） | `/lol player stats Faker` |
-| `earnings <选手ID>` | 选手生涯奖金汇总 | `/lol player earnings Faker` |
-
-### 🔹 转会
-
-| 命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `/lol transfers [赛区]` | 赛区转会动态 | `/lol transfers lck` |
-| `/lol transfers-player <选手ID>` | 选手转会历史 | `/lol transfers-player Faker` |
-| `/lol transfers-team <战队名>` | 战队转会记录 | `/lol transfers-team T1` |
-
 ### 🔹 B站 / 微博
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
 | `/lol bilibili` | B站 LOL 官号最新 5 条视频 | `/lol bilibili` |
 | `/lol weibo` | 微博赛前海报最新 5 条 | `/lol weibo` |
-
-### 🔹 其他查询
-
-| 命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `/lol coverage` | 直播覆盖矩阵（各赛区直播平台） | `/lol coverage` |
 
 ### 🔹 订阅 & 管理
 

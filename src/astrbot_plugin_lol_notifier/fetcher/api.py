@@ -419,30 +419,6 @@ async def get_live_matches(league: str = "") -> LiveResult:
 #  联赛信息
 # ═══════════════════════════════════════════════════
 
-async def get_coverage() -> JsonResult:
-    """获取直播覆盖矩阵（citoapi 独有）。"""
-    cache_key = _cache_key("coverage")
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_coverage
-    result = await fetch_coverage()
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
-async def get_match_coverage(match_id: str) -> JsonResult:
-    """检查单场比赛直播覆盖（citoapi 独有）。"""
-    cache_key = _cache_key("match_coverage", match_id)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_match_coverage
-    result = await fetch_match_coverage(match_id)
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
 async def get_all_leagues() -> JsonResult:
     """获取所有联赛列表。"""
     cache_key = _cache_key("all_leagues_ps")
@@ -487,77 +463,6 @@ async def get_all_teams(league: str = "") -> JsonListResult:
     logger.info(f"[api] Pandascore teams 失败，回退 citoapi ({ln or ''})")
     from .lolesports import fetch_all_teams
     result = await fetch_all_teams(league=ln or "")
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
-# ═══════════════════════════════════════════════════
-#  选手（citoapi 独有 — Pandascore free tier 无统计数据）
-# ═══════════════════════════════════════════════════
-
-async def get_player_stats(player_id: str, season: str = "current") -> JsonResult:
-    """获取选手统计数据（citoapi 独有）。"""
-    cache_key = _cache_key("player_stats", player_id, season)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_player_stats
-    result = await fetch_player_stats(player_id=player_id, season=season)
-    _cache_set(cache_key, result, _STATS_CACHE_TTL)
-    return result
-
-
-async def get_player_earnings_summary(player_id: str) -> JsonResult:
-    """获取选手奖金汇总（citoapi 独有）。"""
-    cache_key = _cache_key("player_earnings_summary", player_id)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_player_earnings_summary
-    result = await fetch_player_earnings_summary(player_id)
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
-# ═══════════════════════════════════════════════════
-#  转会（citoapi 独有 — Pandascore 无此端点）
-# ═══════════════════════════════════════════════════
-
-async def get_transfers(league: str = "") -> JsonResult:
-    """获取转会信息（citoapi 独有）。"""
-    ln = normalize_league(league) if league else None
-    if league and ln is None:
-        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
-    cache_key = _cache_key("transfers", ln or "")
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_transfers
-    result = await fetch_transfers(league=ln or "")
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
-async def get_transfers_player(player_id: str) -> JsonResult:
-    """获取选手转会历史（citoapi 独有）。"""
-    cache_key = _cache_key("transfers_player", player_id)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_transfers_player
-    result = await fetch_transfers_player(player_id)
-    _cache_set(cache_key, result, _INFO_CACHE_TTL)
-    return result
-
-
-async def get_transfers_team(team_slug: str) -> JsonResult:
-    """获取战队转会活动（citoapi 独有）。"""
-    cache_key = _cache_key("transfers_team", team_slug)
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-    from .lolesports import fetch_transfers_team
-    result = await fetch_transfers_team(team_slug)
     _cache_set(cache_key, result, _INFO_CACHE_TTL)
     return result
 
