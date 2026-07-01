@@ -488,13 +488,13 @@ async def fetch_tournament_standings(tournament_id: str) -> StandingsResult:
     return Success(value=entries)
 
 
-async def fetch_tournament_matches(tournament_id: str, status: str = "") -> ScheduleResult:
-    """获取锦标赛比赛列表 GET /lol/tournaments/{id}/matches"""
+async def fetch_tournament_matches(
+    tournament_id: str,
+    per_page: int = 50,
+) -> ScheduleResult:
+    """获取锦标赛下的比赛列表 GET /lol/tournaments/{id}/matches"""
     endpoint = f"/lol/tournaments/{tournament_id}/matches"
-    params: dict[str, Any] = {"per_page": 50}
-    if status:
-        endpoint = f"{endpoint}/{status}"
-    result = await _ps_call(endpoint, params)
+    result = await _ps_call(endpoint, {"per_page": per_page})
     if not result.ok:
         return Failure(error=result.error)
 
@@ -523,16 +523,17 @@ async def fetch_team(team_id: str) -> JsonResult:
     return await _ps_call(f"/lol/teams/{team_id}")
 
 
-async def fetch_team_matches(team_id: str, status: str = "") -> ScheduleResult:
-    """获取战队比赛列表 GET /lol/teams/{id}/matches"""
-    endpoint = f"/lol/teams/{team_id}/matches"
-    if status:
-        endpoint = f"{endpoint}/{status}"
-    result = await _ps_call(endpoint, {"per_page": 50})
+async def fetch_team_matches(team_id: str) -> ScheduleResult:
+    """获取战队已完成的比赛 GET /lol/teams/{id}/games"""
+    result = await _ps_call(f"/lol/teams/{team_id}/games", params={"per_page": 30})
     if not result.ok:
         return Failure(error=result.error)
     data = result.value.get("data", []) if isinstance(result.value, dict) else []
-    matches = _ps_parse_matches(data)
+    matches: list[LeagueMatch] = []
+    for g in data:
+        m = _ps_game_to_brief_match(g)
+        if m:
+            matches.append(m)
     return Success(value=matches)
 
 
@@ -556,15 +557,90 @@ async def fetch_player(player_id: str) -> JsonResult:
     return await _ps_call(f"/lol/players/{player_id}")
 
 
-async def fetch_player_matches(player_id: str) -> ScheduleResult:
-    """获取选手比赛列表 GET /lol/players/{id}/matches"""
-    result = await _ps_call(f"/lol/players/{player_id}/matches", {"per_page": 50})
-    if not result.ok:
-        return Failure(error=result.error)
-    data = result.value.get("data", []) if isinstance(result.value, dict) else []
-    matches = _ps_parse_matches(data)
-    return Success(value=matches)
+async def fetch_player_stats(player_id: str) -> JsonResult:
+    """获取选手统计数据 GET /lol/players/{id}/stats"""
+    return await _ps_call(f"/lol/players/{player_id}/stats")
 
+
+# ═══════════════════════════════════════════════════
+#  Games（对局）
+# ═══════════════════════════════════════════════════
+
+async def fetch_game_detail(game_id: str) -> JsonResult:
+    """获取单局详情 GET /lol/games/{id}"""
+    return await _ps_call(f"/lol/games/{game_id}")
+
+
+async def fetch_game_events(game_id: str) -> JsonResult:
+    """获取对局事件 GET /lol/games/{id}/events"""
+    return await _ps_call(f"/lol/games/{game_id}/events")
+
+
+def _ps_game_to_brief_match(game: dict) -> LeagueMatch | None:
+    """将 /lol/games 返回的 game 对象转为简要 LeagueMatch。"""
+    try:
+        winner = game.get("winner", {})
+        winner_id = winner.get("id") if isinstance(winner, dict) else None
+        winner_name = winner.get("name", "") if isinstance(winner, dict) else ""
+
+        match_data = game.get("match", {}) if isinstance(game.get("match"), dict) else {}
+        match_id = str(match_data.get("id", game.get("match_id", "")))
+
+        league_info = match_data.get("league", {}) if isinstance(match_data.get("league"), dict) else {}
+
+        opponents_data = match_data.get("opponents", []) or []
+        team_names: list[str] = []
+        for opp in opponents_data:
+            if isinstance(opp, dict):
+                opp_team = opp.get("team") if isinstance(opp.get("team"), dict) else opp.get("opponent") if isinstance(opp.get("opponent"), dict) else {}
+                if isinstance(opp_team, dict):
+                    team_names.append(opp_team.get("name") or opp_team.get("acronym") or "TBD")
+
+        scheduled_at = match_data.get("scheduled_at", game.get("scheduled_at", game.get("begin_at", "")))
+        status = match_data.get("status", game.get("status", ""))
+        status_map = {"not_started": "upcoming", "running": "live", "finished": "completed"}
+        status = status_map.get(status, status)
+
+        start_date = ""
+        start_time = ""
+        if scheduled_at:
+            try:
+                from datetime import datetime, timezone, timedelta
+                dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+                beijing_tz = timezone(timedelta(hours=8))
+                dt_local = dt.astimezone(beijing_tz)
+                start_date = dt_local.strftime("%Y-%m-%d")
+                start_time = dt_local.strftime("%H:%M")
+            except Exception:
+                start_date = scheduled_at[:10] if len(scheduled_at) >= 10 else scheduled_at
+                start_time = scheduled_at[11:16] if len(scheduled_at) >= 16 else ""
+
+        length = game.get("length", 0) or 0
+        duration = f"{length // 60}:{length % 60:02d}" if length > 0 else ""
+
+        game_obj = MatchGame(
+            game_no=game.get("position", 0) or 0,
+            blue_team=team_names[0] if len(team_names) > 0 else "",
+            red_team=team_names[1] if len(team_names) > 1 else "",
+            winner=winner_name,
+            duration=duration,
+        )
+
+        return LeagueMatch(
+            league=league_info.get("name", ""),
+            stage="",
+            round=match_data.get("name", "") or f"Match #{match_id}",
+            match_id=match_id,
+            match_name=match_data.get("name", ""),
+            start_date=start_date,
+            start_time=start_time,
+            status=status,
+            teams=team_names,
+            games=[game_obj],
+            summary=f"{' vs '.join(team_names)}" if team_names else "",
+        )
+    except Exception:
+        return None
 
 # ═══════════════════════════════════════════════════
 #  辅助 — 赛程聚合

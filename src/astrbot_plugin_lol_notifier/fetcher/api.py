@@ -464,6 +464,16 @@ async def get_all_teams(league: str = "") -> JsonListResult:
 
 
 # ═══════════════════════════════════════════════════
+#  对局
+# ═══════════════════════════════════════════════════
+
+async def get_game_detail(game_id: str) -> JsonResult:
+    """获取单局详情 GET /lol/games/{id}。"""
+    from .pandascore import fetch_game_detail as ps_game
+    return await ps_game(game_id)
+
+
+# ═══════════════════════════════════════════════════
 #  工具
 # ═══════════════════════════════════════════════════
 

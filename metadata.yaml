@@ -1,7 +1,7 @@
 name: astrbot_plugin_lol_notifier
 display_name: LoL Notifier
 desc: PandaScore 主数据源 + citoapi 备用 — LoL 电竞查询（赛程/实时/结果/详情/排名/战队/B站/微博） + 自动推送
-version: v1.4.0
+version: v1.5.0
 author: MareDevi
 repo: https://github.com/MareDevi/astrbot_plugin_lol_notifier
 pip:

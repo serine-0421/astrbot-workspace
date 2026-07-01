@@ -6,6 +6,7 @@
 from .message import (
     format_bilibili_bp_update,
     format_bilibili_update,
+    format_game_info,
     format_live_match,
     format_match_basic,
     format_match_bp,
@@ -29,6 +30,8 @@ __all__ = [
     "format_standings",
     # 实时
     "format_live_match",
+    # 对局
+    "format_game_info",
     # 推送专用
     "format_pre_match_preview",
     "format_post_match_summary",

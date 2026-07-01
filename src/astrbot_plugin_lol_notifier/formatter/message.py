@@ -294,3 +294,43 @@ def format_team_info(data: dict) -> str:
     return "\n".join(lines)
 
 
+def format_game_info(data: dict) -> str:
+    """格式化单局详情 GET /lol/games/{id} 的原始返回。"""
+    import json
+    game_id = data.get("id", "")
+    position = data.get("position", "")
+    status = data.get("status", "")
+    length = data.get("length", 0) or 0
+    duration = f"{length // 60}:{length % 60:02d}" if length > 0 else "N/A"
+
+    winner = data.get("winner", {}) or {}
+    winner_name = winner.get("name", "N/A") if isinstance(winner, dict) else str(winner)
+
+    match_data = data.get("match", {}) or {}
+    match_name = match_data.get("name", "")
+
+    teams = data.get("teams", []) or []
+    team_lines = []
+    for t in teams:
+        if isinstance(t, dict):
+            t_name = t.get("name", "")
+            t_side = t.get("side", "")
+            side_tag = f"[{t_side}]" if t_side else ""
+            team_lines.append(f"  {side_tag} {t_name}")
+
+    lines = [
+        f"🎮 对局详情",
+        f"Game ID: {game_id}",
+    ]
+    if match_name:
+        lines.append(f"所属比赛: {match_name}")
+    lines.append(f"局数: #{position}")
+    lines.append(f"状态: {status}")
+    lines.append(f"时长: {duration}")
+    lines.append(f"胜者: {winner_name}")
+    if team_lines:
+        lines.append("队伍:")
+        lines.extend(team_lines)
+    return "\n".join(lines)
+
+

@@ -1,6 +1,6 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、BP 阵容、积分榜、战队/选手详情、转会动态与直播覆盖矩阵。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
+LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、积分榜、战队详情。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
 > 📡 数据来源：[PandaScore](https://pandascore.co)（主） + [citoapi](https://api.citoapi.com/api/v1/lol)（备用）
@@ -15,30 +15,16 @@ flowchart LR
     PS -->|成功| RESULT["返回结果"]
     PS -->|失败| CITO
     CITO --> RESULT
-
-    subgraph Pandascore 覆盖
-        PS_S["schedule / next"]
-        PS_L["live（实时比赛）"]
-        PS_R["result / detail"]
-        PS_ST["standings"]
-        PS_T["today / teams / leagues"]
-    end
-
-    subgraph citoapi 独有
-        C_BP["bp 阵容"]
-        C_TR["transfers 转会"]
-        C_CV["coverage 直播"]
-        C_PL["player stats / earnings"]
-    end
 ```
 
 | 功能 | 主数据源 | 回退 |
 |:--|:--|:--|
 | 赛程/下一场/今日 | PandaScore `GET /lol/matches` | citoapi |
 | 实时比赛 `/lol live` | PandaScore `GET /lol/matches/running` ⚡ | citoapi |
-| 比赛结果/详情 | PandaScore `GET /lol/matches/past` + `/{id}` | citoapi |
+| 比赛结果/详情 | PandaScore `GET /lol/matches/past` + `/{id}/games` | citoapi |
 | 积分榜 `/lol standings` | PandaScore `GET /lol/tournaments/{id}/standings` | citoapi |
 | 战队列表 `/lol team info` | PandaScore `GET /lol/teams` | citoapi |
+| 单局详情 | PandaScore `GET /lol/games/{id}` | — |
 
 ---
 
@@ -70,6 +56,12 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol result [赛区] [stage] [round]` | 比赛结果（默认最近一场） | `/lol result lpl` `/lol result lck playoff 3` |
 | `/lol detail [赛区] [stage] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
 | `/lol standings [赛区] [stage] [season]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
+
+### 🔹 对局 — `/lol game`
+
+| 子命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `info <game_id>` | 查看单局详情（PandaScore game ID） | `/lol game info 123456` |
 
 ### 🔹 战队 — `/lol team`
 
@@ -173,7 +165,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ```
 astrbot_plugin_lol_notifier/
-├── main.py                     # AstrBot 插件入口（19 条命令）
+├── main.py                     # AstrBot 插件入口（16 条命令）
 ├── metadata.yaml               # 插件元数据
 ├── pyproject.toml              # 项目配置 & 依赖
 ├── _conf_schema.json           # 配置 Schema

@@ -12,6 +12,7 @@ from .api import (
     close_session,
     get_all_leagues,
     get_all_teams,
+    get_game_detail,
     get_live_matches,
     get_match_detail,
     get_match_result,
@@ -47,6 +48,7 @@ __all__ = [
     "get_standings",
     "get_all_leagues",
     "get_all_teams",
+    "get_game_detail",
     # === lolesports.py（citoapi 底层）===
     "lolesports_close_session",
     "lolesports_get_api_key",

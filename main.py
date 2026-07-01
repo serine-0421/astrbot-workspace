@@ -12,6 +12,7 @@ Commands (prefix /lol):
     /lol detail [league] [regular|playoff] [round]
     /lol standings [league] [regular|playoff] [season]
     /lol today [league]
+    /lol game info <game_id>
     /lol team info [team_name]
     /lol bilibili
     /lol weibo
@@ -55,14 +56,17 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol result [league] [regular|playoff] [round]
       比赛结果（默认最近一场）
   /lol detail [league] [regular|playoff] [round]
-      比赛详细信息
+      比赛详细信息（含对局数据）
   /lol standings [league] [regular|playoff] [season]
       排名 / 积分榜
   /lol today [league]
       今日赛程
 
+━━━ 对局 ━━━
+  /lol game info <game_id>           单局详情（PandaScore game ID）
+
 ━━━ 战队 ━━━
-  /lol team info [name]          战队信息（可按名称筛选）
+  /lol team info [name]              战队信息（可按名称筛选）
 
 ━━━ B站 / 微博 ━━━
   /lol bilibili                      B站 LOL官号最新 5 条视频
@@ -103,7 +107,7 @@ def _parse_match_args(args: list[str]) -> tuple[str, str, str]:
     "astrbot_plugin_lol_notifier",
     "MareDevi",
     "LoL赛事推送与查询插件",
-    "1.1.3",
+    "1.5.0",
     "https://github.com/MareDevi/astrbot_plugin_lol_notifier",
 )
 class LoLNotifierPlugin(Star):
@@ -261,6 +265,15 @@ class LoLNotifierPlugin(Star):
             elif sub_cmd == "weibo":
                 async for m in _result(self._handle_weibo(event)):
                     yield m
+
+            elif sub_cmd == "game":
+                sub2 = args[0].lower() if len(args) > 0 else "info"
+                game_id = args[1] if len(args) > 1 else ""
+                if sub2 == "info" and game_id:
+                    async for m in _result(self._handle_game_info(event, game_id)):
+                        yield m
+                else:
+                    yield event.plain_result(f"❌ 用法: /lol game info <game_id>")
 
             else:
                 yield event.plain_result(f"❌ 该命令不存在：/lol {sub_cmd}\n\n{HELP_TEXT}")
@@ -459,6 +472,16 @@ class LoLNotifierPlugin(Star):
                         yield event.plain_result(fmt.format_team_info({"teams": data}))
                 else:
                     yield event.plain_result(fmt.format_team_info(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    async def _handle_game_info(self, event, game_id):
+        result = await api.get_game_detail(game_id)
+        match result:
+            case Success(value=data) if isinstance(data, dict):
+                yield event.plain_result(fmt.format_game_info(data))
+            case Success():
+                yield event.plain_result(f"❌ 未找到对局 {game_id} 的信息。")
             case Failure(error=err):
                 yield event.plain_result(f"❌ {err}")
 
