@@ -41,11 +41,11 @@ _LEAGUE_HINT = " / ".join(supported_leagues()).upper()
 
 _cache: dict[str, dict] = {}
 
-_SCHEDULE_CACHE_TTL: float = 600.0       # 赛程 10 分钟
-_STANDINGS_CACHE_TTL: float = 900.0      # 排名 15 分钟
-_LIVE_CACHE_TTL: float = 120.0           # 实时 2 分钟
-_INFO_CACHE_TTL: float = 1800.0          # 联赛/战队 30 分钟
-_SHORT_SCHEDULE_CACHE_TTL: float = 300.0 # 今日/即将 5 分钟
+_SCHEDULE_CACHE_TTL: float = 300.0       # 赛程 5 分钟
+_STANDINGS_CACHE_TTL: float = 600.0      # 排名 10 分钟
+_LIVE_CACHE_TTL: float = 45.0            # 实时 45 秒
+_INFO_CACHE_TTL: float = 1200.0          # 联赛/战队 20 分钟
+_SHORT_SCHEDULE_CACHE_TTL: float = 120.0 # 今日/即将 2 分钟
 
 
 def _cache_key(*args: str) -> str:
@@ -362,6 +362,11 @@ async def get_live_matches(league: str = "") -> LiveResult:
     if league and not ln and league.strip():
         return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
 
+    cache_key = _cache_key("live_ps", ln or "")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     # 优先 Pandascore
     from .pandascore import fetch_live_matches as ps_live
     from .pandascore import fetch_match_detail as ps_detail
@@ -381,6 +386,7 @@ async def get_live_matches(league: str = "") -> LiveResult:
                         "winner": g.winner,
                         "duration": g.duration,
                     } for g in m.games]
+        _cache_set(cache_key, result, _LIVE_CACHE_TTL)
         return result
 
     # 回退 citoapi
@@ -390,6 +396,7 @@ async def get_live_matches(league: str = "") -> LiveResult:
     if result.ok and result.value:
         for lm in result.value:
             await fetch_live_match_details(lm)
+    _cache_set(cache_key, result, _LIVE_CACHE_TTL)
     return result
 
 

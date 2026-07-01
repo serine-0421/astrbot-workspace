@@ -106,12 +106,12 @@ async def _get_client() -> httpx.AsyncClient:
 
 # ── 速率限制 ──
 
-_MIN_REQUEST_INTERVAL: float = 1.0  # Pandascore free tier: 2 req/s，留安全余量
+_MIN_REQUEST_INTERVAL: float = 0.4  # 1000 req/h 配额充裕，预留 2.5 req/s 爆发
 _last_request_time: float = 0.0
 _rate_lock = asyncio.Lock()
 
 _MAX_RETRIES: int = 3
-_RETRY_BASE_DELAY: float = 2.0
+_RETRY_BASE_DELAY: float = 1.0
 
 
 async def _rate_limit_wait() -> None:
