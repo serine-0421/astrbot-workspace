@@ -160,9 +160,9 @@ def format_bilibili_update(items: list[dict[str, Any]]) -> str:
     items: [{"type":"video","bvid":"BV...","title":"...","pubdate":1234567890,"url":"...","cover":"..."}]
     """
     if not items:
-        return "📺 暂无 B 站官号更新。"
+        return "📺 暂无 B 站账号更新。"
 
-    lines = [f"📺 B 站官号更新了 {len(items)} 个视频：\n"]
+    lines = [f"📺 B 站账号更新了 {len(items)} 个视频：\n"]
     for i, item in enumerate(items, 1):
         title = item.get("title", "无标题")
         url = item.get("url", "")
@@ -276,6 +276,330 @@ def format_live_match(live: LiveMatch) -> str:
         lines.append("⏳ 等待比赛开始...")
 
     return "\n".join(lines).rstrip()
+
+
+# ═══════════════════════════════════════════════════
+#  参考数据 — Champions / Items / Spells / Runes / Masteries
+# ═══════════════════════════════════════════════════
+
+def _extract_items(raw: Any) -> list[dict]:
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        return raw.get("data", raw.get("items", raw.get("champions", []))) or []
+    return []
+
+
+def format_champions(raw: Any, limit: int = 15) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无英雄数据。"
+    lines = ["📋 **英雄列表**", ""]
+    for c in items[:limit]:
+        name = c.get("name", "?")
+        armor = c.get("armor", "?")
+        hp = c.get("hp", "?")
+        image = c.get("image_url", "")
+        lines.append(f"  {name}  🛡{armor}  ❤{hp}")
+    if len(items) > limit:
+        lines.append(f"  ... 还有 {len(items) - limit} 个")
+    return "\n".join(lines)
+
+
+def format_items(raw: Any, limit: int = 15) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无装备数据。"
+    lines = ["🎒 **装备列表**", ""]
+    for it in items[:limit]:
+        name = it.get("name", "?")
+        gold = it.get("total_gold", it.get("gold", {}).get("total", "?"))
+        lines.append(f"  {name}  💰{gold}")
+    if len(items) > limit:
+        lines.append(f"  ... 还有 {len(items) - limit} 件")
+    return "\n".join(lines)
+
+
+def format_spells(raw: Any) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无召唤师技能数据。"
+    lines = ["✨ **召唤师技能**", ""]
+    for s in items:
+        name = s.get("name", "?")
+        cd = s.get("cooldown", "?")
+        lines.append(f"  {name}  ⏱冷却 {cd}s")
+    return "\n".join(lines)
+
+
+def format_runes(raw: Any, limit: int = 20) -> str:
+    """格式化符文（runes-reforged 格式）。"""
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无符文数据。"
+    lines = ["🔮 **符文**", ""]
+    for r in items[:limit]:
+        name = r.get("name", "?")
+        path = r.get("rune_path_name", r.get("rune_path", {}).get("name", "")) if isinstance(r, dict) else ""
+        line = f"  {name}"
+        if path:
+            line += f"  [{path}]"
+        lines.append(line)
+    if len(items) > limit:
+        lines.append(f"  ... 还有 {len(items) - limit} 个")
+    return "\n".join(lines)
+
+
+def format_rune_paths(raw: Any) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无符文系数据。"
+    lines = ["📂 **符文系**", ""]
+    for p in items:
+        name = p.get("name", "?")
+        runes = p.get("runes", [])
+        count = len(runes) if isinstance(runes, list) else 0
+        lines.append(f"  {name}  ({count} 个符文)")
+    return "\n".join(lines)
+
+
+def format_masteries(raw: Any) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无天赋数据。"
+    lines = ["🎯 **天赋**", ""]
+    for m in items[:15]:
+        name = m.get("name", "?")
+        lines.append(f"  {name}")
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  对局扩展 — Events / Frames / Match Games
+# ═══════════════════════════════════════════════════
+
+def format_game_events(raw: Any, limit: int = 50) -> str:
+    events = raw if isinstance(raw, list) else raw.get("data", raw.get("events", [])) if isinstance(raw, dict) else []
+    if not events:
+        return "📋 暂无事伴数据。"
+    lines = ["📡 **对局事伴**", ""]
+    for e in events[:limit]:
+        etype = e.get("type", "?")
+        ts = e.get("timestamp", e.get("game_timestamp", ""))
+        team = e.get("team", {}).get("name", "") if isinstance(e.get("team"), dict) else ""
+        line = f"  [{ts}] {etype}"
+        if team:
+            line += f"  ({team})"
+        lines.append(line)
+    if len(events) > limit:
+        lines.append(f"  ... 还有 {len(events) - limit} 个")
+    return "\n".join(lines)
+
+
+def format_game_frames(raw: Any, limit: int = 20) -> str:
+    frames = raw if isinstance(raw, list) else raw.get("data", raw.get("frames", [])) if isinstance(raw, dict) else []
+    if not frames:
+        return "📋 暂无帧数据。"
+    lines = ["🎞 **对局帧**", ""]
+    for f in frames[:limit]:
+        num = f.get("frame_number", f.get("num", "?"))
+        blue_gold = f.get("blue_team", {}).get("total_gold", "?") if isinstance(f.get("blue_team"), dict) else "?"
+        red_gold = f.get("red_team", {}).get("total_gold", "?") if isinstance(f.get("red_team"), dict) else "?"
+        lines.append(f"  帧 {num}: 🔵{blue_gold}g  🔴{red_gold}g")
+    return "\n".join(lines)
+
+
+def format_match_games(raw: Any) -> str:
+    games = raw if isinstance(raw, list) else raw.get("data", raw.get("games", [])) if isinstance(raw, dict) else []
+    if not games:
+        return "📋 暂无对局数据。"
+    lines = ["🎮 **比赛对局**", ""]
+    for g in games:
+        pos = g.get("position", "?")
+        winner = g.get("winner", {}).get("name", "TBD") if isinstance(g.get("winner"), dict) else "TBD"
+        length = g.get("length", 0) or 0
+        dur = f"{length // 60}:{length % 60:02d}" if length else ""
+        lines.append(f"  Game {pos}: 🏆{winner}  ⏱{dur}")
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════
+#  选手 & 战队
+# ═══════════════════════════════════════════════════
+
+def format_players(raw: Any, limit: int = 15) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无选手数据。"
+    lines = ["👤 **选手列表**", ""]
+    for p in items[:limit]:
+        name = p.get("name", "?")
+        role = p.get("role", p.get("position", "?"))
+        team = p.get("current_team", {}).get("name", "") if isinstance(p.get("current_team"), dict) else ""
+        line = f"  {name}  ({role})"
+        if team:
+            line += f"  — {team}"
+        lines.append(line)
+    if len(items) > limit:
+        lines.append(f"  ... 还有 {len(items) - limit} 位")
+    return "\n".join(lines)
+
+
+def format_player(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return "📋 选手数据格式错误。"
+    data = raw.get("data", raw)
+    name = data.get("name", "?")
+    role = data.get("role", "?")
+    hometown = data.get("hometown", "")
+    team = data.get("current_team", {})
+    team_name = team.get("name", "") if isinstance(team, dict) else ""
+    lines = [f"👤 **{name}**"]
+    if team_name:
+        lines.append(f"  战队: {team_name}")
+    lines.append(f"  位置: {role}")
+    if hometown:
+        lines.append(f"  国籍: {hometown}")
+    return "\n".join(lines)
+
+
+def format_player_stats(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return "📋 统计数据格式错误。"
+    data = raw.get("data", raw)
+    player = data.get("player", {}) if isinstance(data.get("player"), dict) else {}
+    name = player.get("name", "?")
+    lines = [f"📊 **{name}** 统计数据", ""]
+    # 遍历统计字段
+    for key, val in data.items():
+        if key in ("player", "team"):
+            continue
+        if isinstance(val, (int, float)):
+            lines.append(f"  {key}: {val}")
+    return "\n".join(lines) if len(lines) > 1 else f"📊 {name}: 暂无详细统计"
+
+
+# ═══════════════════════════════════════════════════
+#  系列赛 & 锦标赛
+# ═══════════════════════════════════════════════════
+
+def format_series(raw: Any, limit: int = 10) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无系列赛数据。"
+    lines = ["🏆 **系列赛列表**", ""]
+    for s in items[:limit]:
+        name = s.get("name", s.get("full_name", "?"))
+        season = s.get("season", "")
+        begin = s.get("begin_at", "")[:10]
+        end = s.get("end_at", "")[:10]
+        line = f"  {name}"
+        if begin and end:
+            line += f"  ({begin} ~ {end})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_series_detail(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return "📋 系列赛数据格式错误。"
+    data = raw.get("data", raw)
+    name = data.get("name", data.get("full_name", "?"))
+    season = data.get("season", "")
+    begin = data.get("begin_at", "")[:10]
+    end = data.get("end_at", "")[:10]
+    league = data.get("league", {}).get("name", "") if isinstance(data.get("league"), dict) else ""
+    return (
+        f"🏆 **{name}**\n"
+        f"  联赛: {league or '—'}\n"
+        f"  赛季: {season}\n"
+        f"  时间: {begin} ~ {end}"
+    )
+
+
+def format_tournaments(raw: Any, limit: int = 10) -> str:
+    items = _extract_items(raw)
+    if not items:
+        return "📋 暂无锦标赛数据。"
+    lines = ["🏅 **锦标赛列表**", ""]
+    for t in items[:limit]:
+        name = t.get("name", "?")
+        begin = t.get("begin_at", "")[:10]
+        end = t.get("end_at", "")[:10]
+        league = t.get("league", {}).get("name", "") if isinstance(t.get("league"), dict) else ""
+        line = f"  {name}  ({begin} ~ {end})"
+        if league:
+            line += f"  [{league}]"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_tournament(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return "📋 锦标赛数据格式错误。"
+    data = raw.get("data", raw)
+    name = data.get("name", "?")
+    begin = data.get("begin_at", "")[:10]
+    end = data.get("end_at", "")[:10]
+    league = data.get("league", {}).get("name", "") if isinstance(data.get("league"), dict) else ""
+    prize = data.get("prizepool", "")
+    return (
+        f"🏅 **{name}**\n"
+        f"  联赛: {league or '—'}\n"
+        f"  时间: {begin} ~ {end}\n"
+        f"  奖金池: {prize or '—'}"
+    )
+
+
+def format_match_players_stats(raw: Any, limit: int = 15) -> str:
+    """格式化比赛选手统计。"""
+    items = raw if isinstance(raw, list) else raw.get("data", []) if isinstance(raw, dict) else []
+    if not items:
+        return "📋 暂无选手统计数据。"
+    lines = ["📊 **比赛选手统计**", ""]
+    for p in items[:limit]:
+        player = p.get("player", {}) if isinstance(p.get("player"), dict) else {}
+        name = player.get("name", "?")
+        kills = p.get("kills", "—")
+        deaths = p.get("deaths", "—")
+        assists = p.get("assists", "—")
+        champ = p.get("champion", {}).get("name", "") if isinstance(p.get("champion"), dict) else ""
+        line = f"  {name}  {kills}/{deaths}/{assists}"
+        if champ:
+            line += f"  ({champ})"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_team_stats(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return "📋 战队统计数据格式错误。"
+    data = raw.get("data", raw)
+    team = data.get("team", {}) if isinstance(data.get("team"), dict) else {}
+    name = team.get("name", "?")
+    lines = [f"📊 **{name}** 统计数据", ""]
+    for key, val in data.items():
+        if key in ("team",):
+            continue
+        if isinstance(val, (int, float)):
+            lines.append(f"  {key}: {val}")
+    if len(lines) == 2:
+        lines.append("  (详细统计待补充)")
+    return "\n".join(lines)
+
+
+def format_tournament_teams_stats(raw: Any, limit: int = 15) -> str:
+    items = raw if isinstance(raw, list) else raw.get("data", []) if isinstance(raw, dict) else []
+    if not items:
+        return "📋 暂无战队统计数据。"
+    lines = ["📊 **锦标赛战队统计**", ""]
+    for t in items[:limit]:
+        team = t.get("team", {}) if isinstance(t.get("team"), dict) else {}
+        name = team.get("name", "?")
+        wins = t.get("wins", "—")
+        losses = t.get("losses", "—")
+        lines.append(f"  {name}  ✅{wins} ❌{losses}")
+    return "\n".join(lines)
 
 
 def format_team_info(data: dict) -> str:

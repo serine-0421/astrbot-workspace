@@ -1,9 +1,9 @@
 """Background scheduler for LoL notifications.
 
 推送场景：
-  1. B站 LOL官号 (UID 50329118) → 视频更新
-  2. 微博各队官号 → 赛前海报 (LPL+预告关键词)
-  3. B站 BLG官号 (UID 545271146) → BP图文动态
+  1. B站 哔哩哔哩英雄联盟赛事 (UID 50329118) → 视频更新
+  2. 微博 英雄联盟赛事 (UID 6537214902) → 赛前海报 (LPL+预告关键词)
+  3. B站 BLG电子竞技俱乐部 (UID 268999208) → BP图文动态
   4. 距比赛日 ≤ 24h → 赛程 + 对阵表 + 海报
   5. 赛前 30min → 首发名单 + 交手记录 + 预测
   6. 每小局 BP 结束 → 阵容名单
@@ -147,6 +147,7 @@ class LoLScheduler:
             "elimination_updates": self._state.elimination_updates,
             "bilibili_video_seen": {k: list(v) for k, v in self._state.bilibili_video_seen.items()},
             "bilibili_dynamic_seen": {k: list(v) for k, v in self._state.bilibili_dynamic_seen.items()},
+            "bilibili_live_state": self._state.bilibili_live_state,
             "weibo_updates": list(self._state.weibo_updates),
         }
         await self._star.put_kv_data("lol_state", state_dict)
@@ -179,7 +180,7 @@ class LoLScheduler:
         # 1. B站多账号 → 视频+图文动态 (per-account per-type toggle)
         await self._check_bilibili_feeds()
 
-        # 2. 微博各队官号 → 赛前海报 (LPL+预告)
+        # 2. 微博 英雄联盟赛事 (UID 6537214902) → 赛前海报 (LPL+预告)
         await self._check_weibo_posters()
 
         # ═══ citoapi 赛事推送（配额紧张时跳过） ═══
@@ -366,7 +367,7 @@ class LoLScheduler:
                 logger.info(f"[LoLNotifier] Sent round result for {match_key} game {game.game_no}")
 
     async def _check_match_finished(self, match: LeagueMatch, now: datetime) -> None:
-        """比赛结束后：最终比分 + MVP / FMVP + B站官号回放视频 + 颁奖采访"""
+        """比赛结束后：最终比分 + MVP / FMVP + B站回放视频 + 颁奖采访"""
         match_key = f"{match.league}_{match.stage}_{match.round}_final"
         if self._state.post_round_notice.get(match_key):
             return
@@ -406,6 +407,10 @@ class LoLScheduler:
                 # ── 图文动态 ──
                 if is_bilibili_push_enabled(self._config, key, "article"):
                     await self._check_bilibili_dynamics_for_uid(uid, key, name)
+
+                # ── 直播 ──
+                if is_bilibili_push_enabled(self._config, key, "live"):
+                    await self._check_bilibili_live_for_uid(uid, key, name)
         except Exception as e:
             logger.error(f"[LoLNotifier] Error checking bilibili feeds: {e}")
 
@@ -483,10 +488,46 @@ class LoLScheduler:
         except Exception as e:
             logger.error(f"[LoLNotifier] Error checking B站 dynamics for {name}: {e}")
 
+    async def _check_bilibili_live_for_uid(self, uid: str, key: str, name: str) -> None:
+        """检测指定 UID 的直播开播/下播状态并推送。"""
+        try:
+            lives = await bilibili.fetch_bilibili_live_status(uid)
+            has_notified = self._state.bilibili_live_state.get(uid, False)
+
+            if lives:
+                live = lives[0]
+                if live.get("live_status") == 0:
+                    # 下播
+                    if has_notified:
+                        text = f"⏹️ **{name}** 直播已结束\n  ▸ {live.get('title', '')}"
+                        await self._broadcast(text, None)
+                        self._state.bilibili_live_state[uid] = False
+                        await self._persist_state()
+                        logger.info(f"[LoLNotifier] B站-{name}: live ended")
+                elif live.get("live_status") == 1 and not has_notified:
+                    # 开播
+                    text = (
+                        f"🔴 **{name}** 开播了！\n"
+                        f"  ▸ {live.get('title', '')}\n"
+                        f"  ▸ 人气 {live.get('online', 0):,}\n"
+                        f"  ▸ {live.get('url', '')}"
+                    )
+                    await self._broadcast(text, None)
+                    self._state.bilibili_live_state[uid] = True
+                    await self._persist_state()
+                    logger.info(f"[LoLNotifier] B站-{name}: live started")
+            else:
+                # 无直播间或未开播
+                if has_notified:
+                    self._state.bilibili_live_state[uid] = False
+                    await self._persist_state()
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error checking B站 live for {name}: {e}")
+
     # ── 微博赛前海报 ──
 
     async def _check_weibo_posters(self) -> None:
-        """微博各队官号：检测 LPL+预告 赛前海报并推送"""
+        """微博 英雄联盟赛事 (UID 6537214902)：检测 LPL+预告 赛前海报并推送"""
         if not is_weibo_poster_push_enabled(self._config):
             return
 

@@ -1,6 +1,6 @@
 """Weibo 内容抓取器 — LPL 赛前海报推送。
 
-流程：检测官号更新 → 关键词匹配 "LPL" + "预告" → 下载图片 → 推送。
+流程：检测英雄联盟赛事微博更新 → 关键词匹配 "LPL" + "预告" → 下载图片 → 推送。
 使用 m.weibo.cn 移动端 API，无需 Cookie 即可访问公开内容。
 """
 
@@ -108,7 +108,7 @@ def _is_poster(post: dict) -> bool:
 
 
 async def fetch_weibo_posters(uids: list[str] | None = None) -> list[dict[str, Any]]:
-    """获取所有关注官号中匹配"LPL+预告"的赛前海报。
+    """获取英雄联盟赛事微博 (UID 6537214902) 中匹配"LPL+预告"的赛前海报。
 
     Args:
         uids: 微博 UID 列表，None 时不抓取。

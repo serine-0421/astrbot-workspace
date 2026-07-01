@@ -46,7 +46,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # ── B站: 多账号推送开关（由 _gen_bilibili_defaults 生成） ──
     **_gen_bilibili_defaults(),
     "bilibili_check_interval": 60,
-    # ── 微博: 各队官号（海报推送） ──
+    # ── 微博: 英雄联盟赛事 (UID 6537214902)（海报推送） ──
     "weibo_uids": [
         "6537214902",  # 英雄联盟赛事
     ],

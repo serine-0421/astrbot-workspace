@@ -15,7 +15,7 @@ BLG_UID = "268999208"
 
 
 async def fetch_blg_bp_dynamics() -> list[dict[str, Any]]:
-    """获取 BLG 官号的图文动态并筛选含"BP"关键词的内容。
+    """获取 BLG电子竞技俱乐部 (UID 268999208) 的图文动态并筛选含"BP"关键词的内容。
 
     使用共享抓取器 fetch_bilibili_dynamics()，仅筛选 DYNAMIC_TYPE_DRAW + BP 关键词。
 

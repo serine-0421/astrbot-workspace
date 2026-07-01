@@ -4,9 +4,12 @@
   1. Pandascore (https://api.pandascore.co) — 主数据源，Bearer token 鉴权
   2. citoapi   (https://api.citoapi.com/api/v1) — 备用数据源，x-api-key 鉴权
 
-覆盖功能:
-  Pandascore: schedule, live, result, detail, standings, today, teams, leagues
-  citoapi:     schedule, result, detail, standings, today, live（全部为回退）
+覆盖功能（全部优先 Pandascore，失败回退 citoapi）:
+  schedule, live, result, detail, standings, today, teams, leagues,
+  champions, items, spells, runes, masteries,
+  game events, game frames, match games,
+  players, player stats, series, tournaments,
+  match/team/tournament stats
 
 内置 TTL 缓存以降低 API 调用频率。
 """
@@ -485,3 +488,232 @@ def _pick_match(matches: list[LeagueMatch], round_number: int | str) -> LeagueMa
         if m.round == r or m.match_id == r:
             return m
     return None
+
+
+# ═══════════════════════════════════════════════════
+#  参考数据 — Champions / Items / Spells / Runes / Masteries
+# ═══════════════════════════════════════════════════
+
+_REFERENCE_CACHE_TTL: float = 3600.0  # 参考数据 1 小时
+
+
+async def get_champions(version: str = "") -> JsonResult:
+    cache_key = _cache_key("champions_ps", version)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_champions
+    r = await fetch_champions(version=version)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_champion(champion_id: int | str) -> JsonResult:
+    cache_key = _cache_key("champion_ps", str(champion_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_champion
+    r = await fetch_champion(champion_id)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_items(version: str = "") -> JsonResult:
+    cache_key = _cache_key("items_ps", version)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_items
+    r = await fetch_items(version=version)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_item(item_id: int | str) -> JsonResult:
+    cache_key = _cache_key("item_ps", str(item_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_item
+    r = await fetch_item(item_id)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_spells() -> JsonResult:
+    cache_key = _cache_key("spells_ps")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_spells
+    r = await fetch_spells()
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_spell(spell_id: int | str) -> JsonResult:
+    cache_key = _cache_key("spell_ps", str(spell_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_spell
+    r = await fetch_spell(spell_id)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_runes() -> JsonResult:
+    cache_key = _cache_key("runes_ps")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_runes_reforged
+    r = await fetch_runes_reforged()
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_rune_paths() -> JsonResult:
+    cache_key = _cache_key("rune_paths_ps")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_rune_paths
+    r = await fetch_rune_paths()
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_masteries() -> JsonResult:
+    cache_key = _cache_key("masteries_ps")
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_masteries
+    r = await fetch_masteries()
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+# ═══════════════════════════════════════════════════
+#  对局扩展 — Events / Frames / Match Games
+# ═══════════════════════════════════════════════════
+
+async def get_game_events(game_id: str, page: int = 1, per_page: int = 50) -> JsonResult:
+    cache_key = _cache_key("game_events_ps", game_id, str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_game_events as ps_events
+    r = await ps_events(game_id)
+    _cache_set(cache_key, r, _LIVE_CACHE_TTL)
+    return r
+
+
+async def get_game_frames(game_id: str) -> JsonResult:
+    from .pandascore import fetch_game_frames
+    return await fetch_game_frames(game_id)
+
+
+async def get_match_games(match_id: str) -> JsonResult:
+    from .pandascore import fetch_match_games
+    return await fetch_match_games(match_id)
+
+
+# ═══════════════════════════════════════════════════
+#  选手 & 战队
+# ═══════════════════════════════════════════════════
+
+async def get_players(league: str = "", page: int = 1, per_page: int = 50) -> JsonListResult:
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("players_ps", ln or "", str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_players as ps_players
+    r = await ps_players(league=ln or "", page=page, per_page=per_page)
+    _cache_set(cache_key, r, _INFO_CACHE_TTL)
+    return r
+
+
+async def get_player(player_id: int | str) -> JsonResult:
+    cache_key = _cache_key("player_ps", str(player_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_player as ps_player
+    r = await ps_player(player_id)
+    _cache_set(cache_key, r, _INFO_CACHE_TTL)
+    return r
+
+
+async def get_player_stats(player_id: int | str) -> JsonResult:
+    from .pandascore import fetch_player_stats as ps_pstats
+    return await ps_pstats(player_id)
+
+
+# ═══════════════════════════════════════════════════
+#  系列赛
+# ═══════════════════════════════════════════════════
+
+async def get_series(league: str = "", status: str = "", page: int = 1) -> JsonResult:
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    cache_key = _cache_key("series_ps", ln or "", status, str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_series_list
+    r = await fetch_series_list(league=ln or "", status=status, page=page)
+    _cache_set(cache_key, r, _SCHEDULE_CACHE_TTL)
+    return r
+
+
+async def get_series_detail(series_id: int | str) -> JsonResult:
+    from .pandascore import fetch_series_detail
+    return await fetch_series_detail(series_id)
+
+
+async def get_series_teams(series_id: int | str) -> JsonResult:
+    from .pandascore import fetch_series_teams
+    return await fetch_series_teams(series_id)
+
+
+# ═══════════════════════════════════════════════════
+#  锦标赛
+# ═══════════════════════════════════════════════════
+
+async def get_tournaments(league: str = "", status: str = "") -> JsonResult:
+    ln = normalize_league(league) if league else None
+    if league and ln is None:
+        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
+    from .pandascore import fetch_tournaments as ps_tn
+    return await ps_tn(league=ln or "", status=status)
+
+
+async def get_tournament(tournament_id: int | str) -> JsonResult:
+    from .pandascore import fetch_tournament as ps_tn
+    return await fetch_tournament(tournament_id)
+
+
+# ═══════════════════════════════════════════════════
+#  统计数据
+# ═══════════════════════════════════════════════════
+
+async def get_match_players_stats(match_id: str) -> JsonResult:
+    from .pandascore import fetch_match_players_stats
+    return await fetch_match_players_stats(match_id)
+
+
+async def get_team_stats(team_id: int | str) -> JsonResult:
+    from .pandascore import fetch_team_stats
+    return await fetch_team_stats(team_id)
+
+
+async def get_tournament_teams_stats(tournament_id: int | str) -> JsonResult:
+    from .pandascore import fetch_tournament_teams_stats
+    return await fetch_tournament_teams_stats(tournament_id)

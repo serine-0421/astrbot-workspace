@@ -721,3 +721,189 @@ async def fetch_today_matches(league: str = "") -> ScheduleResult:
     all_data = running_data + data
     matches = _ps_parse_matches(all_data, league)
     return Success(value=matches)
+
+
+# ═══════════════════════════════════════════════════
+#  Champions — 英雄
+# ═══════════════════════════════════════════════════
+
+async def fetch_champions(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
+    """GET /lol/champions"""
+    params: dict[str, Any] = {"page": page, "per_page": per_page}
+    if version and version != "all":
+        params["filter[videogame_version]"] = version
+    return await _ps_call("/lol/champions", params)
+
+
+async def fetch_champion(champion_id: int | str) -> JsonResult:
+    """GET /lol/champions/{id}"""
+    return await _ps_call(f"/lol/champions/{champion_id}")
+
+
+# ═══════════════════════════════════════════════════
+#  Items — 装备
+# ═══════════════════════════════════════════════════
+
+async def fetch_items(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
+    """GET /lol/items"""
+    params: dict[str, Any] = {"page": page, "per_page": per_page}
+    if version and version != "all":
+        params["filter[videogame_version]"] = version
+    return await _ps_call("/lol/items", params)
+
+
+async def fetch_item(item_id: int | str) -> JsonResult:
+    """GET /lol/items/{id}"""
+    return await _ps_call(f"/lol/items/{item_id}")
+
+
+# ═══════════════════════════════════════════════════
+#  Masteries — 天赋
+# ═══════════════════════════════════════════════════
+
+async def fetch_masteries(page: int = 1, per_page: int = 50) -> JsonResult:
+    """GET /lol/masteries"""
+    return await _ps_call("/lol/masteries", {"page": page, "per_page": per_page})
+
+
+async def fetch_mastery(mastery_id: int | str) -> JsonResult:
+    """GET /lol/masteries/{id}"""
+    return await _ps_call(f"/lol/masteries/{mastery_id}")
+
+
+# ═══════════════════════════════════════════════════
+#  Runes — 符文
+# ═══════════════════════════════════════════════════
+
+async def fetch_runes(page: int = 1, per_page: int = 50) -> JsonResult:
+    """GET /lol/runes"""
+    return await _ps_call("/lol/runes", {"page": page, "per_page": per_page})
+
+
+async def fetch_rune(rune_id: int | str) -> JsonResult:
+    """GET /lol/runes/{id}"""
+    return await _ps_call(f"/lol/runes/{rune_id}")
+
+
+async def fetch_runes_reforged() -> JsonResult:
+    """GET /lol/runes-reforged"""
+    return await _ps_call("/lol/runes-reforged", {"per_page": 100})
+
+
+async def fetch_rune_reforged(rune_id: int | str) -> JsonResult:
+    """GET /lol/runes-reforged/{id}"""
+    return await _ps_call(f"/lol/runes-reforged/{rune_id}")
+
+
+async def fetch_rune_paths() -> JsonResult:
+    """GET /lol/runes-reforged-paths"""
+    return await _ps_call("/lol/runes-reforged-paths")
+
+
+async def fetch_rune_path(path_id: int | str) -> JsonResult:
+    """GET /lol/runes-reforged-paths/{id}"""
+    return await _ps_call(f"/lol/runes-reforged-paths/{path_id}")
+
+
+# ═══════════════════════════════════════════════════
+#  Spells — 召唤师技能
+# ═══════════════════════════════════════════════════
+
+async def fetch_spells(page: int = 1, per_page: int = 50) -> JsonResult:
+    """GET /lol/spells"""
+    return await _ps_call("/lol/spells", {"page": page, "per_page": per_page})
+
+
+async def fetch_spell(spell_id: int | str) -> JsonResult:
+    """GET /lol/spells/{id}"""
+    return await _ps_call(f"/lol/spells/{spell_id}")
+
+
+# ═══════════════════════════════════════════════════
+#  Games — 对局扩展
+# ═══════════════════════════════════════════════════
+
+async def fetch_match_games(match_id: int | str) -> JsonResult:
+    """GET /lol/matches/{id}/games"""
+    return await _ps_call(f"/lol/matches/{match_id}/games")
+
+
+async def fetch_game_frames(game_id: int | str) -> JsonResult:
+    """GET /lol/games/{id}/frames"""
+    return await _ps_call(f"/lol/games/{game_id}/frames")
+
+
+# ═══════════════════════════════════════════════════
+#  Series — 系列赛（扩展）
+# ═══════════════════════════════════════════════════
+
+async def fetch_series_list(
+    league: str = "", status: str = "", page: int = 1, per_page: int = 20
+) -> JsonResult:
+    """GET /lol/series[/{status}]
+
+    Args:
+        status: '', 'past', 'running', 'upcoming'
+    """
+    league_slug = _ps_league(league) if league else ""
+    endpoint = "/lol/series"
+    if status in ("past", "running", "upcoming"):
+        endpoint = f"/lol/series/{status}"
+    params: dict[str, Any] = {"page": page, "per_page": per_page, "sort": "begin_at"}
+    if league_slug:
+        params["filter[league.name]"] = league_slug
+    return await _ps_call(endpoint, params)
+
+
+async def fetch_series_detail(series_id: int | str) -> JsonResult:
+    """GET /lol/series/{id}"""
+    return await _ps_call(f"/lol/series/{series_id}")
+
+
+async def fetch_series_teams(series_id: int | str) -> JsonResult:
+    """GET /lol/series/{id}/teams"""
+    return await _ps_call(f"/lol/series/{series_id}/teams")
+
+
+# ═══════════════════════════════════════════════════
+#  Stats — 选手/战队统计
+# ═══════════════════════════════════════════════════
+
+async def fetch_match_players_stats(match_id: int | str) -> JsonResult:
+    """GET /lol/matches/{id}/players/stats"""
+    return await _ps_call(f"/lol/matches/{match_id}/players/stats")
+
+
+async def fetch_team_stats(team_id: int | str) -> JsonResult:
+    """GET /lol/teams/{id}/stats"""
+    return await _ps_call(f"/lol/teams/{team_id}/stats")
+
+
+async def fetch_series_player_stats(series_id: int | str, player_id: int | str) -> JsonResult:
+    """GET /lol/series/{id}/players/{pid}/stats"""
+    return await _ps_call(f"/lol/series/{series_id}/players/{player_id}/stats")
+
+
+async def fetch_series_teams_stats(series_id: int | str) -> JsonResult:
+    """GET /lol/series/{id}/teams/stats"""
+    return await _ps_call(f"/lol/series/{series_id}/teams/stats")
+
+
+async def fetch_series_team_stats(series_id: int | str, team_id: int | str) -> JsonResult:
+    """GET /lol/series/{id}/teams/{tid}/stats"""
+    return await _ps_call(f"/lol/series/{series_id}/teams/{team_id}/stats")
+
+
+async def fetch_tournament_player_stats(tournament_id: int | str, player_id: int | str) -> JsonResult:
+    """GET /lol/tournaments/{id}/players/{pid}/stats"""
+    return await _ps_call(f"/lol/tournaments/{tournament_id}/players/{player_id}/stats")
+
+
+async def fetch_tournament_teams_stats(tournament_id: int | str) -> JsonResult:
+    """GET /lol/tournaments/{id}/teams/stats"""
+    return await _ps_call(f"/lol/tournaments/{tournament_id}/teams/stats")
+
+
+async def fetch_tournament_team_stats(tournament_id: int | str, team_id: int | str) -> JsonResult:
+    """GET /lol/tournaments/{id}/teams/{tid}/stats"""
+    return await _ps_call(f"/lol/tournaments/{tournament_id}/teams/{team_id}/stats")

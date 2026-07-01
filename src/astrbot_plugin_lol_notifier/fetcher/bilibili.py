@@ -369,20 +369,78 @@ def _parse_dynamics(items: list[dict]) -> list[dict[str, Any]]:
     return results
 
 
-async def fetch_bilibili_live_status(uid: str = "") -> list[dict]:
-    """获取指定 UID 的直播状态。stub — 待实现。"""
-    return []
+async def fetch_bilibili_live_status(uid: str) -> list[dict[str, Any]]:
+    """获取指定 UID 的直播间开播状态。
+
+    调用 B站直播间信息 API，返回当前直播标题、人气、封面等。
+    未开通直播间或未开播返回空列表。
+
+    Returns:
+        [{"room_id":"12345","title":"...","cover":"...","online":1234,
+          "url":"https://live.bilibili.com/12345","live_status":1}]
+    """
+    url = "https://api.live.bilibili.com/room/v1/Room/getRoomInfoOld"
+    headers = _build_headers(f"https://space.bilibili.com/{uid}")
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, params={"mid": uid}, headers=headers)
+            data = resp.json()
+
+        if data.get("code") != 0:
+            logger.debug(f"[Bilibili:{uid}] Live room API error {data.get('code')}: {data.get('message')}")
+            return []
+
+        info = data.get("data", {})
+        if not info or info.get("roomStatus") != 1:
+            return []
+
+        room_id = str(info.get("roomid", ""))
+        cover = info.get("cover", "")
+        title = info.get("title", "")
+        live_status = info.get("liveStatus", 0)  # 0=offline, 1=live
+        online = info.get("online", 0)
+
+        return [{
+            "room_id": room_id,
+            "title": title,
+            "cover": cover,
+            "online": online,
+            "url": info.get("url", "") or f"https://live.bilibili.com/{room_id}",
+            "live_status": live_status,
+        }]
+
+    except Exception as e:
+        logger.debug(f"[Bilibili:{uid}] Live room API exception: {e}")
+        return []
 
 
-# ── 向后兼容别名 ──
+# ═══════════════════════════════════════════════════
+#  回放/评论区/楼中楼
+# ═══════════════════════════════════════════════════
 
-async def fetch_bilibili_replays() -> list[dict]:
-    return []
+_REPLAY_KEYWORDS = ["回放", "Replay", "赛事回放", "全场回放"]
+
+
+async def fetch_bilibili_replays(uid: str = "50329118") -> list[dict[str, Any]]:
+    """获取指定 UID 的赛事回放视频（按标题关键词筛选）。
+
+    从 fetch_bilibili_updates 结果中筛选标题包含回放关键词的视频。
+    """
+    all_videos = await fetch_bilibili_updates(uid)
+    replays = []
+    for v in all_videos:
+        title = v.get("title", "")
+        if any(kw.lower() in title.lower() for kw in _REPLAY_KEYWORDS):
+            replays.append(v)
+    return replays
 
 
 async def fetch_bilibili_comments() -> list[dict]:
+    """UP主评论区发言（待实现）。"""
     return []
 
 
 async def fetch_bilibili_reply_replies() -> list[dict]:
+    """UP主楼中楼回复（待实现）。"""
     return []

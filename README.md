@@ -1,6 +1,6 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、积分榜、战队详情。同时集成 3 个 B 站官号（视频+图文）、微博赛前海报抓取，支持每种内容类型独立开关。
+LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、积分榜、战队详情。同时集成哔哩哔哩英雄联盟赛事、英雄联盟赛事、BLG电子竞技俱乐部三个 B 站账号（视频·图文·直播）及英雄联盟赛事微博的赛前海报抓取，支持每种内容类型独立开关。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
 > 📡 数据来源：[PandaScore](https://pandascore.co)（主） + [citoapi](https://api.citoapi.com/api/v1/lol)（备用）
@@ -45,7 +45,9 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 所有命令以 `/lol` 开头。`[ ]` 表示可选参数，`< >` 表示必填参数。**未指定赛区时默认使用 LPL**。
 
-### 🔹 赛程 & 比赛
+### 🔹 lol matches — 比赛
+
+> PandaScore: `GET /lol/matches` · `GET /lol/matches/running` · `GET /lol/matches/past` · `GET /lol/matches/upcoming` · `GET /lol/matches/{id}`
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
@@ -55,26 +57,122 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 | `/lol live [赛区]` | 正在进行的实时比赛（击杀/经济/塔/龙） | `/lol live` `/lol live lck` |
 | `/lol result [赛区] [stage] [round]` | 比赛结果（默认最近一场） | `/lol result lpl` `/lol result lck playoff 3` |
 | `/lol detail [赛区] [stage] [round]` | 比赛完整详情（含对局数据） | `/lol detail lck` |
-| `/lol standings [赛区] [stage] [season]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
 
-### 🔹 对局 — `/lol game`
+### 🔹 lol games — 对局
 
-| 子命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `info <game_id>` | 查看单局详情（PandaScore game ID） | `/lol game info 123456` |
-
-### 🔹 战队 — `/lol team`
-
-| 子命令 | 说明 | 示例 |
-|:--|:--|:--|
-| `info [战队名]` | 查看所有战队，或按名称筛选 | `/lol team info` `/lol team info T1` |
-
-### 🔹 B站 / 微博
+> PandaScore: `GET /lol/games/{id}` · `GET /lol/games/{id}/events` · `GET /lol/games/{id}/frames` · `GET /lol/matches/{id}/games`
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol bilibili` | 多账号 B站最新视频（3个官号） | `/lol bilibili` |
-| `/lol weibo` | 微博赛前海报最新 5 条 | `/lol weibo` |
+| `/lol game info <game_id>` | 单局详情 | `/lol game info 123456` |
+| `/lol game events <game_id>` | 对局事件 | `/lol game events 123456` |
+| `/lol game frames <game_id>` | 对局帧数据 | `/lol game frames 123456` |
+| `/lol match games <match_id>` | 比赛所有对局 | `/lol match games 789012` |
+
+### 🔹 lol stats — 统计数据
+
+> PandaScore: `GET /lol/matches/{id}/players/stats` · `GET /lol/players/{id}/stats` · `GET /lol/teams/{id}/stats` · `GET /lol/series/{id}/teams/stats` · `GET /lol/tournaments/{id}/teams/{id}/stats`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol match stats <match_id>` | 比赛选手统计 | `/lol match stats 789012` |
+| `/lol player stats <player_id>` | 选手统计 | `/lol player stats 456` |
+| `/lol team stats <team_id>` | 战队统计 | `/lol team stats 123` |
+
+### 🔹 lol teams — 战队
+
+> PandaScore: `GET /lol/teams` · `GET /lol/series/{id}/teams`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol team info [战队名]` | 查看所有战队，或按名称筛选 | `/lol team info` `/lol team info T1` |
+
+### 🔹 lol players — 选手
+
+> PandaScore: `GET /lol/players`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol players [赛区]` | 选手列表 | `/lol players lck` |
+| `/lol player <id>` | 选手信息 | `/lol player 456` |
+
+### 🔹 lol series — 系列赛
+
+> PandaScore: `GET /lol/series` · `GET /lol/series/past` · `GET /lol/series/running` · `GET /lol/series/upcoming`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol series [赛区] [status]` | 系列赛列表（status: past/running/upcoming） | `/lol series lck` `/lol series lck running` |
+| `/lol series detail <id>` | 系列赛详情 | `/lol series detail 42` |
+
+### 🔹 lol tournaments — 锦标赛
+
+> PandaScore: `GET /lol/tournaments` · `GET /lol/tournaments/past` · `GET /lol/tournaments/running` · `GET /lol/tournaments/upcoming`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol tournaments [赛区] [status]` | 锦标赛列表 | `/lol tournaments lck` |
+| `/lol tournament <id>` | 锦标赛详情 | `/lol tournament 15` |
+| `/lol standings [赛区] [stage] [season]` | 积分榜 / 排名 | `/lol standings lck` `/lol standings lpl` |
+
+### 🔹 lol champions — 英雄
+
+> PandaScore: `GET /lol/champions` · `GET /lol/champions/{id}`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol champions [version]` | 英雄列表 | `/lol champions` `/lol champions 14.10` |
+| `/lol champion <id_or_slug>` | 单个英雄 | `/lol champion Aatrox` |
+
+### 🔹 lol items — 装备
+
+> PandaScore: `GET /lol/items` · `GET /lol/items/{id}`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol items [version]` | 装备列表 | `/lol items` `/lol items 14.10` |
+| `/lol item <id_or_slug>` | 单个装备 | `/lol item 1001` |
+
+### 🔹 lol spells — 召唤师技能
+
+> PandaScore: `GET /lol/spells` · `GET /lol/spells/{id}`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol spells` | 召唤师技能列表 | `/lol spells` |
+| `/lol spell <id>` | 单个技能 | `/lol spell 1` |
+
+### 🔹 lol runes — 符文
+
+> PandaScore: `GET /lol/runes` · `GET /lol/runes/{id}` · `GET /lol/runes-reforged` · `GET /lol/runes-reforged-paths`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol runes` | 符文列表 | `/lol runes` |
+| `/lol runes paths` | 符文路径 | `/lol runes paths` |
+
+### 🔹 lol masteries — 天赋
+
+> PandaScore: `GET /lol/masteries` · `GET /lol/masteries/{id}`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol masteries` | 天赋列表 | `/lol masteries` |
+
+### 🔹 lol leagues — 联赛
+
+> PandaScore: `GET /lol/leagues`
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| （联赛信息已内置在赛程/排名/战队等命令中） | | |
+
+### 🔹 哔哩哔哩 / 微博
+
+| 命令 | 说明 | 示例 |
+|:--|:--|:--|
+| `/lol bilibili` | 多账号 B 站综合动态（哔哩哔哩英雄联盟赛事、英雄联盟赛事、BLG电子竞技俱乐部） | `/lol bilibili` |
+| `/lol weibo` | 英雄联盟赛事微博赛前海报最新 5 条 | `/lol weibo` |
 
 ### 🔹 订阅 & 管理
 
@@ -115,10 +213,12 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ### 📡 消息来源集成
 
-| 来源 | 功能 | 触发方式 |
-|:--|:--|:--|
-| 🔔 B站 (3账号) | 视频 + 图文动态推送 + 手动查询 | 订阅自动 / `/lol bilibili` |
-| 📰 微博 | LPL 赛前海报推送 + 手动查询 | 订阅自动 / `/lol weibo` |
+| 来源 | 账号 | 功能 | 触发方式 |
+|:--|:--|:--|:--|
+| 🔔 哔哩哔哩 | 哔哩哔哩英雄联盟赛事 (UID 50329118) | 视频 + 图文动态 + 直播推送 | 订阅自动 / `/lol bilibili` |
+| 🔔 哔哩哔哩 | 英雄联盟赛事 (UID 108532523) | 视频 + 图文动态 + 直播推送 | 订阅自动 / `/lol bilibili` |
+| 🔔 哔哩哔哩 | BLG电子竞技俱乐部 (UID 268999208) | 视频 + 图文动态 + 直播推送 | 订阅自动 / `/lol bilibili` |
+| 📰 微博 | 英雄联盟赛事 (UID 6537214902) | LPL 赛前海报推送 | 订阅自动 / `/lol weibo` |
 
 ---
 
@@ -140,7 +240,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ### B站
 
-3 个账号，每种内容类型独立开关（直播暂未实现）：
+3 个账号，每种内容类型独立开关：
 
 | 账号 | UID | 默认推送 |
 |:--|:--|:--|

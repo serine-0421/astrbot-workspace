@@ -18,6 +18,7 @@ class NotificationState:
     # 多账号 B站推送去重: uid → {id, ...}
     bilibili_video_seen: dict[str, set[str]] = field(default_factory=dict)     # uid → {bvid, ...}
     bilibili_dynamic_seen: dict[str, set[str]] = field(default_factory=dict)   # uid → {dynamic_id, ...}
+    bilibili_live_state: dict[str, bool] = field(default_factory=dict)          # uid → 已通知开播?
     weibo_updates: set[str] = field(default_factory=set)  # 微博帖子 ID
 
     def _ensure_sets(self, d: dict[str, list | set]) -> dict[str, set[str]]:

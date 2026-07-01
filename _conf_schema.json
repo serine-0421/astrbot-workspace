@@ -12,19 +12,19 @@
     "default": ""
   },
   "bilibili_push_lol_video": {
-    "description": "[B站·赛事官号] 视频推送",
+    "description": "[哔哩哔哩英雄联盟赛事] 视频推送",
     "type": "bool",
     "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 视频投稿推送。",
     "default": true
   },
   "bilibili_push_lol_article": {
-    "description": "[B站·赛事官号] 图文动态推送",
+    "description": "[哔哩哔哩英雄联盟赛事] 图文动态推送",
     "type": "bool",
     "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 图文动态推送。",
     "default": true
   },
   "bilibili_push_lol_live": {
-    "description": "[B站·赛事官号] 直播推送",
+    "description": "[哔哩哔哩英雄联盟赛事] 直播推送",
     "type": "bool",
     "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 开播通知。默认关闭。",
     "default": false
