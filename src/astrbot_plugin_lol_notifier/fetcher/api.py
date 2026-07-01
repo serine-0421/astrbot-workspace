@@ -4,8 +4,9 @@
   1. Pandascore (https://api.pandascore.co) — 主数据源，Bearer token 鉴权
   2. citoapi   (https://api.citoapi.com/api/v1) — 备用数据源，x-api-key 鉴权
 
-Pandascore 支持: schedule, live, result, detail, standings, today, teams, players, leagues
-citoapi 独有:   bp, transfers, coverage, player stats/earnings
+覆盖功能:
+  Pandascore: schedule, live, result, detail, standings, today, teams, leagues
+  citoapi:     schedule, result, detail, standings, today, live（全部为回退）
 
 内置 TTL 缓存以降低 API 调用频率。
 """
@@ -43,9 +44,8 @@ _cache: dict[str, dict] = {}
 _SCHEDULE_CACHE_TTL: float = 600.0       # 赛程 10 分钟
 _STANDINGS_CACHE_TTL: float = 900.0      # 排名 15 分钟
 _LIVE_CACHE_TTL: float = 120.0           # 实时 2 分钟
-_INFO_CACHE_TTL: float = 1800.0          # 战队/选手 30 分钟
-_STATS_CACHE_TTL: float = 900.0          # 统计 15 分钟
-_SHORT_SCHEDULE_CACHE_TTL: float = 300.0 # 今日/本周 5 分钟
+_INFO_CACHE_TTL: float = 1800.0          # 联赛/战队 30 分钟
+_SHORT_SCHEDULE_CACHE_TTL: float = 300.0 # 今日/即将 5 分钟
 
 
 def _cache_key(*args: str) -> str:
@@ -322,31 +322,9 @@ async def get_today_schedule(league: str = "") -> ScheduleResult:
     return wrapped
 
 
-async def get_week_schedule(league: str = "") -> JsonResult:
-    """获取本周赛程（citoapi 回退，暂不维护）。"""
-    ln = normalize_league(league) if league else None
-    if league and ln is None and league.strip():
-        return Failure(error=f"不支持的赛区，可用: {_LEAGUE_HINT}")
-    from .lolesports import fetch_schedule as cito_schedule
-    result = await cito_schedule(league=ln or "lpl")
-    if result.ok and result.value:
-        start, end = _date_week_range()
-        filtered = [m for m in result.value if start <= m.start_date <= end]
-        return Success(value=filtered)
-    return result
-
-
 def _date_today() -> str:
     from datetime import date
     return date.today().isoformat()
-
-
-def _date_week_range() -> tuple[str, str]:
-    from datetime import date, timedelta
-    d = date.today()
-    start = d - timedelta(days=d.weekday())
-    end = start + timedelta(days=6)
-    return start.isoformat(), end.isoformat()
 
 
 async def get_upcoming_schedule(league: str = "") -> JsonResult:

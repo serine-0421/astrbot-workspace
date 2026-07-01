@@ -307,14 +307,6 @@ async def fetch_standings(league: str = "lck") -> JsonResult:
     return await _api_call(f"/lol/leagues/{cito}/standings")
 
 
-async def fetch_today_schedule(league: str = "") -> JsonResult:
-    """获取今日赛程 GET /lol/schedule/today"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/schedule/today", params)
-
-
 async def fetch_upcoming_schedule(league: str = "") -> JsonResult:
     """获取即将到来的赛程 GET /lol/schedule/upcoming"""
     params: dict[str, str] = {}
@@ -356,26 +348,6 @@ async def fetch_all_leagues() -> JsonResult:
 #  Live（实时比赛）
 # ═══════════════════════════════════════════════════
 
-async def fetch_coverage() -> JsonResult:
-    """获取直播覆盖矩阵 GET /lol/coverage"""
-    return await _api_call("/lol/coverage")
-
-
-async def fetch_matches_live() -> JsonResult:
-    """获取所有正在进行的比赛 GET /lol/matches/live"""
-    return await _api_call("/lol/matches/live")
-
-
-async def fetch_match_coverage(match_id: str) -> JsonResult:
-    """检查单场比赛直播覆盖 GET /lol/matches/{matchId}/coverage"""
-    return await _api_call(f"/lol/matches/{match_id}/coverage")
-
-
-async def fetch_live_series(match_id: str) -> JsonResult:
-    """获取实时系列赛状态 GET /lol/live/{matchId}/series"""
-    return await _api_call(f"/lol/live/{match_id}/series")
-
-
 async def fetch_live_visual_state(game_id: str) -> JsonResult:
     """获取实时视觉状态 GET /lol/live/{gameId}/visual-state"""
     return await _api_call(f"/lol/live/{game_id}/visual-state")
@@ -390,51 +362,6 @@ async def fetch_match_info(match_id: str) -> JsonResult:
     return await _api_call(f"/lol/matches/{match_id}")
 
 
-async def fetch_match_games(match_id: str) -> JsonResult:
-    """获取比赛的各局 GET /lol/matches/{matchId}/games"""
-    return await _api_call(f"/lol/matches/{match_id}/games")
-
-
-async def fetch_game_info(game_id: str) -> JsonResult:
-    """获取单局比赛信息 GET /lol/games/{gameId}"""
-    return await _api_call(f"/lol/games/{game_id}")
-
-
-async def fetch_game_stats(game_id: str) -> JsonResult:
-    """获取单局统计数据 GET /lol/games/{gameId}/stats"""
-    return await _api_call(f"/lol/games/{game_id}/stats")
-
-
-async def fetch_game_player_stats(game_id: str) -> JsonResult:
-    """获取单局选手统计 GET /lol/games/{gameId}/player-stats"""
-    return await _api_call(f"/lol/games/{game_id}/player-stats")
-
-
-async def fetch_game_postgame(game_id: str) -> JsonResult:
-    """获取单局赛后数据 GET /lol/games/{gameId}/postgame"""
-    return await _api_call(f"/lol/games/{game_id}/postgame")
-
-
-async def fetch_game_plates(game_id: str) -> JsonResult:
-    """获取单局塔皮数据 GET /lol/games/{gameId}/plates"""
-    return await _api_call(f"/lol/games/{game_id}/plates")
-
-
-async def fetch_game_distributions(game_id: str) -> JsonResult:
-    """获取单局经济/伤害分布 GET /lol/games/{gameId}/distributions"""
-    return await _api_call(f"/lol/games/{game_id}/distributions")
-
-
-async def fetch_game_vision(game_id: str) -> JsonResult:
-    """获取单局视野数据 GET /lol/games/{gameId}/vision"""
-    return await _api_call(f"/lol/games/{game_id}/vision")
-
-
-async def fetch_game_jungle_share(game_id: str) -> JsonResult:
-    """获取单局打野资源占比 GET /lol/games/{gameId}/jungle-share"""
-    return await _api_call(f"/lol/games/{game_id}/jungle-share")
-
-
 # ═══════════════════════════════════════════════════
 #  Teams（战队）
 # ═══════════════════════════════════════════════════
@@ -445,87 +372,6 @@ async def fetch_all_teams(league: str = "") -> JsonResult:
     if league:
         params["league"] = _resolve_slug(league)
     return await _api_call("/lol/teams", params)
-
-
-async def fetch_team_roster_history(team_slug: str) -> JsonResult:
-    """获取战队历史阵容 GET /lol/teams/{slug}/roster/history"""
-    return await _api_call(f"/lol/teams/{team_slug}/roster/history")
-
-
-async def fetch_team_objectives(team_slug: str, last: int = 10) -> JsonResult:
-    """获取战队目标控制率 GET /lol/teams/{slug}/objectives"""
-    return await _api_call(f"/lol/teams/{team_slug}/objectives", {"last": str(last)})
-
-
-# ═══════════════════════════════════════════════════
-#  Players（选手）
-# ═══════════════════════════════════════════════════
-
-async def fetch_player_stats(player_id: str, season: str = "current") -> JsonResult:
-    """获取选手统计数据 GET /lol/players/{playerId}/stats"""
-    return await _api_call(f"/lol/players/{player_id}/stats", {"season": season})
-
-
-async def fetch_player_form(player_id: str, windows: int = 10, league: str = "") -> JsonResult:
-    """获取选手近期状态 GET /lol/players/{playerId}/form"""
-    params: dict[str, str] = {"windows": str(windows)}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call(f"/lol/players/{player_id}/form", params)
-
-
-async def fetch_player_champion_pool(player_id: str, last: int = 20, league: str = "") -> JsonResult:
-    """获取选手英雄池 GET /lol/players/{playerId}/champion-pool"""
-    params: dict[str, str] = {"last": str(last)}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call(f"/lol/players/{player_id}/champion-pool", params)
-
-
-async def fetch_player_earnings(player_id: str) -> JsonResult:
-    """获取选手奖金 GET /lol/players/{playerId}/earnings"""
-    return await _api_call(f"/lol/players/{player_id}/earnings")
-
-
-async def fetch_player_earnings_summary(player_id: str) -> JsonResult:
-    """获取选手奖金汇总 GET /lol/players/{playerId}/earnings/summary"""
-    return await _api_call(f"/lol/players/{player_id}/earnings/summary")
-
-
-async def fetch_player_teams(player_id: str) -> JsonResult:
-    """获取选手队伍历史 GET /lol/players/{playerId}/teams"""
-    return await _api_call(f"/lol/players/{player_id}/teams")
-
-
-# ═══════════════════════════════════════════════════
-#  Transfers（转会）
-# ═══════════════════════════════════════════════════
-
-async def fetch_transfers(league: str = "") -> JsonResult:
-    """获取转会列表 GET /lol/transfers"""
-    params: dict[str, str] = {}
-    if league:
-        params["league"] = _resolve_slug(league)
-    return await _api_call("/lol/transfers", params)
-
-
-async def fetch_transfers_player(player_id: str) -> JsonResult:
-    """获取选手转会记录 GET /lol/transfers/player/{playerId}"""
-    return await _api_call(f"/lol/transfers/player/{player_id}")
-
-
-async def fetch_transfers_team(team_slug: str) -> JsonResult:
-    """获取战队转会记录 GET /lol/transfers/team/{slug}"""
-    return await _api_call(f"/lol/transfers/team/{team_slug}")
-
-
-# ═══════════════════════════════════════════════════
-#  Webhooks（事件订阅）
-# ═══════════════════════════════════════════════════
-
-async def fetch_webhook_events() -> JsonResult:
-    """获取 Webhook 事件类型列表 GET /lol/webhooks/events"""
-    return await _api_call("/lol/webhooks/events")
 
 
 # ═══════════════════════════════════════════════════

@@ -1,30 +1,24 @@
 ﻿"""LoL plugin fetcher package — 数据抓取层.
 
-三大部分:
-- lolesports.py: citoapi HTTP 请求（官方文档端点）
-- api.py:       数据访问封装层（cache + league 校验 + Result 封装）
-- bilibili / bilibili_dynamic / weibo: 第三方平台数据抓取
+架构:
+- pandascore.py:  Pandascore HTTP 客户端（主数据源，Bearer token）
+- lolesports.py:  citoapi HTTP 客户端（备用数据源，x-api-key）
+- api.py:         数据访问封装层（Pandascore 优先 + citoapi 回退 + TTL 缓存 + Result 封装）
+- bilibili.py / bilibili_dynamic.py / weibo.py: 第三方平台数据抓取
 """
 
-from . import api, bilibili, bilibili_dynamic, lolesports, weibo
+from . import api, bilibili, bilibili_dynamic, lolesports, pandascore, weibo
 from .api import (
     close_session,
     get_all_leagues,
     get_all_teams,
-    get_coverage,
-    get_match_coverage,
+    get_live_matches,
     get_match_detail,
     get_match_result,
-    get_player_earnings_summary,
-    get_player_stats,
     get_schedule,
     get_standings,
     get_today_schedule,
-    get_transfers,
-    get_transfers_player,
-    get_transfers_team,
     get_upcoming_schedule,
-    get_week_schedule,
 )
 from .bilibili import (
     fetch_bilibili_comments,
@@ -42,45 +36,30 @@ from .lolesports import (
 from .weibo import fetch_weibo_announcements, fetch_weibo_by_keyword, fetch_weibo_posters
 
 __all__ = [
-    # ==================== api.py ====================
+    # === api.py（对外数据接口）===
     "close_session",
-    # Schedule
     "get_schedule",
     "get_today_schedule",
-    "get_week_schedule",
     "get_upcoming_schedule",
-    # Matches
+    "get_live_matches",
     "get_match_result",
     "get_match_detail",
-    # Standings
     "get_standings",
-    # Coverage
-    "get_coverage",
-    "get_match_coverage",
-    # Leagues
     "get_all_leagues",
-    # Teams
     "get_all_teams",
-    # Players
-    "get_player_stats",
-    "get_player_earnings_summary",
-    # Transfers
-    "get_transfers",
-    "get_transfers_player",
-    "get_transfers_team",
-    # ==================== lolesports.py ====================
+    # === lolesports.py（citoapi 底层）===
     "lolesports_close_session",
     "lolesports_get_api_key",
     "lolesports_set_api_key",
-    # ==================== bilibili ====================
+    # === bilibili ===
     "fetch_bilibili_updates",
     "fetch_bilibili_live_status",
     "fetch_bilibili_replays",
     "fetch_bilibili_comments",
     "fetch_bilibili_reply_replies",
-    # ==================== bilibili_dynamic ====================
+    # === bilibili_dynamic ===
     "fetch_blg_bp_dynamics",
-    # ==================== weibo ====================
+    # === weibo ===
     "fetch_weibo_by_keyword",
     "fetch_weibo_posters",
     "fetch_weibo_announcements",
