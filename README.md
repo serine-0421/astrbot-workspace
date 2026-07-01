@@ -17,15 +17,6 @@ flowchart LR
     CITO --> RESULT
 ```
 
-| 功能 | 主数据源 | 回退 |
-|:--|:--|:--|
-| 赛程/下一场/今日 | PandaScore `GET /lol/matches` | citoapi |
-| 实时比赛 `/lol live` | PandaScore `GET /lol/matches/running` ⚡ | citoapi |
-| 比赛结果/详情 | PandaScore `GET /lol/matches/past` + `/{id}/games` | citoapi |
-| 积分榜 `/lol standings` | PandaScore `GET /lol/tournaments/{id}/standings` | citoapi |
-| 战队列表 `/lol team info` | PandaScore `GET /lol/teams` | citoapi |
-| 单局详情 | PandaScore `GET /lol/games/{id}` | — |
-
 ---
 
 ## 📦 安装
