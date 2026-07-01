@@ -92,28 +92,28 @@ async def get_schedule(
     from .pandascore import fetch_running_matches as ps_running
 
     upcoming = await ps_upcoming(league=league_n, per_page=30)
-    if upcoming.ok and upcoming.value:
-        # 同时拉 running 合并
-        running = await ps_running(league=league_n)
-        all_matches = upcoming.value
-        if running.ok and running.value:
-            all_matches = running.value + all_matches
-        stage_n = normalize_stage(stage) or "regular"
-        filtered = [m for m in all_matches if m.stage == stage_n or stage_n == "regular"]
-        wrapped = Success(value=filtered)
+    if not upcoming.ok:
+        # 仅 HTTP 错误时回退 citoapi
+        logger.info(f"[api] Pandascore schedule 错误，回退 citoapi ({league_n})")
+        from .lolesports import fetch_schedule as cito_schedule
+        result = await cito_schedule(league=league_n)
+        if result.ok and result.value:
+            stage_n = normalize_stage(stage) or "regular"
+            filtered = [m for m in result.value if m.stage == stage_n or stage_n == "regular"]
+            wrapped = Success(value=filtered)
+        else:
+            wrapped = result
         _cache_set(cache_key, wrapped, _SCHEDULE_CACHE_TTL)
         return wrapped
 
-    # 回退 citoapi
-    logger.info(f"[api] Pandascore schedule 失败，回退 citoapi ({league_n})")
-    from .lolesports import fetch_schedule as cito_schedule
-    result = await cito_schedule(league=league_n)
-    if result.ok and result.value:
-        stage_n = normalize_stage(stage) or "regular"
-        filtered = [m for m in result.value if m.stage == stage_n or stage_n == "regular"]
-        wrapped = Success(value=filtered)
-    else:
-        wrapped = result
+    # 同时拉 running 合并
+    running = await ps_running(league=league_n)
+    all_matches = upcoming.value or []
+    if running.ok and running.value:
+        all_matches = running.value + all_matches
+    stage_n = normalize_stage(stage) or "regular"
+    filtered = [m for m in all_matches if m.stage == stage_n or stage_n == "regular"]
+    wrapped = Success(value=filtered)
     _cache_set(cache_key, wrapped, _SCHEDULE_CACHE_TTL)
     return wrapped
 
@@ -137,8 +137,16 @@ async def get_match_result(
 
     # 先查已结束比赛
     past = await ps_past(league=league_n, per_page=20)
-    if past.ok and past.value:
-        matches = past.value
+    if not past.ok:
+        # 仅 HTTP 错误时回退 citoapi
+        logger.info(f"[api] Pandascore match_result 错误，回退 citoapi ({league_n})")
+        from .lolesports import fetch_schedule as cito_schedule
+        result = await cito_schedule(league=league_n)
+        if not result.ok:
+            return result
+        matches = result.value or []
+        if not matches:
+            return Success(value=None)
         if isinstance(round_number, str) and round_number.lower() == "last":
             completed = [m for m in matches if m.status in ("completed", "finished")]
             if completed:
@@ -147,28 +155,21 @@ async def get_match_result(
         r = str(round_number)
         for m in matches:
             if m.round == r or m.match_id == r:
+                if m.status in ("completed", "finished"):
+                    return Success(value=m)
+        for m in matches:
+            if m.round == r or m.match_id == r:
                 return Success(value=m)
         return Success(value=None)
 
-    # 回退 citoapi
-    logger.info(f"[api] Pandascore match_result 失败，回退 citoapi ({league_n})")
-    from .lolesports import fetch_schedule as cito_schedule
-    result = await cito_schedule(league=league_n)
-    if not result.ok:
-        return result
-    matches = result.value or []
-    if not matches:
-        return Success(value=None)
+    # Pandascore 成功（含空列表）
+    matches = past.value or []
     if isinstance(round_number, str) and round_number.lower() == "last":
         completed = [m for m in matches if m.status in ("completed", "finished")]
         if completed:
             return Success(value=completed[-1])
         return Success(value=matches[-1] if matches else None)
     r = str(round_number)
-    for m in matches:
-        if m.round == r or m.match_id == r:
-            if m.status in ("completed", "finished"):
-                return Success(value=m)
     for m in matches:
         if m.round == r or m.match_id == r:
             return Success(value=m)
@@ -193,8 +194,10 @@ async def get_match_detail(
     if rn_str.isdigit() and len(rn_str) >= 5:
         from .pandascore import fetch_match_detail as ps_detail
         result = await ps_detail(rn_str)
-        if result.ok and result.value:
-            m = result.value[0]
+        if result.ok:
+            m = result.value[0] if result.value else None
+            if m is None:
+                return Failure(error=f"未找到比赛 {rn_str} 的详细信息。")
             # 转为 MatchDetail 格式
             from ..models import MatchDetail, MatchGame
             detail = MatchDetail(
@@ -206,8 +209,8 @@ async def get_match_detail(
                 games=m.games,
             )
             return Success(value=detail)
-        # 回退 citoapi
-        logger.info(f"[api] Pandascore detail {rn_str} 失败，回退 citoapi")
+        # 仅 HTTP 错误时回退 citoapi
+        logger.info(f"[api] Pandascore detail {rn_str} 错误，回退 citoapi")
         from .lolesports import _parse_full_match_detail, fetch_match_info
         detail = await fetch_match_info(rn_str)
         if detail.ok and isinstance(detail.value, dict):
@@ -218,28 +221,35 @@ async def get_match_detail(
     from .pandascore import fetch_past_matches as ps_past
     from .pandascore import fetch_upcoming_matches as ps_upcoming
 
+    any_ps_ok = False
     for ps_fn in [ps_past, ps_upcoming]:
         sched = await ps_fn(league=league_n, per_page=20)
-        if sched.ok and sched.value:
-            target = _pick_match(sched.value, round_number)
-            if target and len(target.match_id) >= 5:
-                from .pandascore import fetch_match_detail as ps_detail
-                detail = await ps_detail(target.match_id)
-                if detail.ok and detail.value:
-                    m = detail.value[0]
-                    from ..models import MatchDetail
-                    return Success(value=MatchDetail(
-                        league=m.league,
-                        stage=m.stage,
-                        round=m.round,
-                        match_name=m.match_name,
-                        summary=m.summary,
-                        games=m.games,
-                    ))
-            break
+        if not sched.ok:
+            continue
+        any_ps_ok = True
+        sched_matches = sched.value or []
+        target = _pick_match(sched_matches, round_number)
+        if target and len(target.match_id) >= 5:
+            from .pandascore import fetch_match_detail as ps_detail
+            detail = await ps_detail(target.match_id)
+            if detail.ok and detail.value:
+                m = detail.value[0]
+                from ..models import MatchDetail
+                return Success(value=MatchDetail(
+                    league=m.league,
+                    stage=m.stage,
+                    round=m.round,
+                    match_name=m.match_name,
+                    summary=m.summary,
+                    games=m.games,
+                ))
 
-    # 回退 citoapi
-    logger.info(f"[api] Pandascore detail 失败，回退 citoapi ({league_n})")
+    # Pandascore 成功返回但无匹配 → 不查 citoapi，直接报未找到
+    if any_ps_ok:
+        return Failure(error=f"未找到比赛 {rn_str} 的详细信息。")
+
+    # 所有 Pandascore 调用均失败 → 回退 citoapi
+    logger.info(f"[api] Pandascore detail 全部错误，回退 citoapi ({league_n})")
     from .lolesports import _parse_full_match_detail, fetch_match_info, fetch_schedule as cito_schedule
     sched = await cito_schedule(league=league_n)
     if not sched.ok:
@@ -304,12 +314,12 @@ async def get_today_schedule(league: str = "") -> ScheduleResult:
     # 优先 Pandascore
     from .pandascore import fetch_today_matches as ps_today
     result = await ps_today(league=ln or "")
-    if result.ok and result.value:
+    if result.ok:
         _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
         return result
 
-    # 回退 citoapi
-    logger.info(f"[api] Pandascore today 失败，回退 citoapi ({ln or ''})")
+    # 仅 HTTP 错误时回退 citoapi
+    logger.info(f"[api] Pandascore today 错误，回退 citoapi ({ln or ''})")
     from .lolesports import fetch_schedule as cito_schedule
     result = await cito_schedule(league=ln or "lpl")
     if result.ok and result.value:
@@ -340,12 +350,12 @@ async def get_upcoming_schedule(league: str = "") -> JsonResult:
 
     from .pandascore import fetch_upcoming_matches as ps_upcoming
     result = await ps_upcoming(league=ln or "", per_page=20)
-    if result.ok and result.value:
-        result = Success(value=result.value)
+    if result.ok:
         _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
         return result
 
-    logger.info(f"[api] Pandascore upcoming 失败，回退 citoapi ({ln or ''})")
+    # 仅 HTTP 错误时回退 citoapi
+    logger.info(f"[api] Pandascore upcoming 错误，回退 citoapi ({ln or ''})")
     from .lolesports import fetch_upcoming_schedule as cito_upcoming
     result = await cito_upcoming(league=ln or "")
     _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
@@ -371,26 +381,27 @@ async def get_live_matches(league: str = "") -> LiveResult:
     from .pandascore import fetch_live_matches as ps_live
     from .pandascore import fetch_match_detail as ps_detail
     result = await ps_live(league=ln)
-    if result.ok and result.value:
+    if result.ok:
         # 填充详细信息
-        for lm in result.value:
-            if lm.match_id:
-                detail = await ps_detail(lm.match_id)
-                if detail.ok and detail.value:
-                    m = detail.value[0]
-                    lm.games = [{
-                        "game_no": g.game_no,
-                        "state": g.winner,
-                        "blue_team": g.blue_team,
-                        "red_team": g.red_team,
-                        "winner": g.winner,
-                        "duration": g.duration,
-                    } for g in m.games]
+        if result.value:
+            for lm in result.value:
+                if lm.match_id:
+                    detail = await ps_detail(lm.match_id)
+                    if detail.ok and detail.value:
+                        m = detail.value[0]
+                        lm.games = [{
+                            "game_no": g.game_no,
+                            "state": g.winner,
+                            "blue_team": g.blue_team,
+                            "red_team": g.red_team,
+                            "winner": g.winner,
+                            "duration": g.duration,
+                        } for g in m.games]
         _cache_set(cache_key, result, _LIVE_CACHE_TTL)
         return result
 
-    # 回退 citoapi
-    logger.info(f"[api] Pandascore live 失败，回退 citoapi ({ln or ''})")
+    # 仅 HTTP 错误时回退 citoapi
+    logger.info(f"[api] Pandascore live 错误，回退 citoapi ({ln or ''})")
     from .lolesports import fetch_live_match_details, fetch_live_matches as cito_live
     result = await cito_live(ln if ln else None)
     if result.ok and result.value:

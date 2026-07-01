@@ -75,6 +75,30 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol subscribe / unsubscribe / apikey / test"""
 
 
+def _parse_match_args(args: list[str]) -> tuple[str, str, str]:
+    """智能解析 match 命令参数，识别 match ID / round 数字。
+
+    /lol result LPL → ("lpl", "regular", "last")
+    /lol result LPL 115616219464607521 → ("lpl", "regular", "115616219464607521")
+    /lol result LPL regular 3 → ("lpl", "regular", "3")
+    /lol result LPL playoff → ("lpl", "playoff", "last")
+    """
+    if not args:
+        return ("lpl", "regular", "last")
+    league = args[0]
+    if len(args) == 1:
+        return (league, "regular", "last")
+    # 第二个参数可能是 stage 也可能是 round/match_id
+    arg1 = args[1]
+    if arg1.isdigit():
+        # 纯数字 → match ID 或 round number
+        return (league, "regular", arg1)
+    if len(args) >= 3:
+        return (league, arg1, args[2])
+    # 非数字的单个第二参数 → stage，无 round
+    return (league, arg1, "last")
+
+
 @register(
     "astrbot_plugin_lol_notifier",
     "MareDevi",
@@ -182,16 +206,12 @@ class LoLNotifierPlugin(Star):
                     yield m
 
             elif sub_cmd == "result":
-                league = args[0] if len(args) > 0 else "lpl"
-                stage = args[1] if len(args) > 1 else "regular"
-                round_num = args[2] if len(args) > 2 else "last"
+                league, stage, round_num = _parse_match_args(args)
                 async for m in _result(self._handle_result(event, league, stage, round_num)):
                     yield m
 
             elif sub_cmd == "detail":
-                league = args[0] if len(args) > 0 else "lpl"
-                stage = args[1] if len(args) > 1 else "regular"
-                round_num = args[2] if len(args) > 2 else "last"
+                league, stage, round_num = _parse_match_args(args)
                 async for m in _result(self._handle_detail(event, league, stage, round_num)):
                     yield m
 
