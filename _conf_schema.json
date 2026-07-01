@@ -11,29 +11,59 @@
     "hint": "citoapi 的 API Key，用于获取 LoL 赛程/排名/BP/实时数据。Key 长期有效，无需刷新。获取地址: https://api.citoapi.com/ 或联系管理员。也可通过环境变量 CITO_API_KEY 设置。",
     "default": ""
   },
-  "bilibili_uid": {
-    "description": "B站 LOL官号 UID",
-    "type": "string",
-    "hint": "英雄联盟赛事官方 B 站账号 UID，用于监控视频更新。默认 50329118。",
-    "default": "50329118"
-  },
-  "enable_bilibili_video_push": {
-    "description": "开启 B站 LOL官号视频推送",
+  "bilibili_push_lol_video": {
+    "description": "[B站·赛事官号] 视频推送",
     "type": "bool",
-    "hint": "开启后，LOL 官号有新视频投稿时将自动推送给订阅者。",
+    "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 视频投稿推送。",
     "default": true
   },
-  "bilibili_blg_uid": {
-    "description": "B站 BLG官号 UID",
-    "type": "string",
-    "hint": "BLG 电子竞技俱乐部 B 站账号 UID，用于监控 BP 图文动态。默认 545271146。",
-    "default": "545271146"
-  },
-  "enable_bilibili_blg_bp_push": {
-    "description": "开启 BLG BP 图文推送",
+  "bilibili_push_lol_article": {
+    "description": "[B站·赛事官号] 图文动态推送",
     "type": "bool",
-    "hint": "开启后，BLG 官号发布含\"BP\"关键词的图文动态时将自动推送。",
+    "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 图文动态推送。",
     "default": true
+  },
+  "bilibili_push_lol_live": {
+    "description": "[B站·赛事官号] 直播推送",
+    "type": "bool",
+    "hint": "哔哩哔哩英雄联盟赛事 (UID 50329118) — 开播通知。默认关闭。",
+    "default": false
+  },
+  "bilibili_push_lolesports_video": {
+    "description": "[B站·英雄联盟赛事] 视频推送",
+    "type": "bool",
+    "hint": "英雄联盟赛事 (UID 108532523) — 视频投稿推送。默认关闭。",
+    "default": false
+  },
+  "bilibili_push_lolesports_article": {
+    "description": "[B站·英雄联盟赛事] 图文动态推送",
+    "type": "bool",
+    "hint": "英雄联盟赛事 (UID 108532523) — 图文动态推送。",
+    "default": true
+  },
+  "bilibili_push_lolesports_live": {
+    "description": "[B站·英雄联盟赛事] 直播推送",
+    "type": "bool",
+    "hint": "英雄联盟赛事 (UID 108532523) — 开播通知。默认关闭。",
+    "default": false
+  },
+  "bilibili_push_blg_video": {
+    "description": "[B站·BLG] 视频推送",
+    "type": "bool",
+    "hint": "BLG电子竞技俱乐部 (UID 268999208) — 视频投稿推送。",
+    "default": true
+  },
+  "bilibili_push_blg_article": {
+    "description": "[B站·BLG] 图文动态推送",
+    "type": "bool",
+    "hint": "BLG电子竞技俱乐部 (UID 268999208) — 图文动态推送。",
+    "default": true
+  },
+  "bilibili_push_blg_live": {
+    "description": "[B站·BLG] 直播推送",
+    "type": "bool",
+    "hint": "BLG电子竞技俱乐部 (UID 268999208) — 开播通知。默认关闭。",
+    "default": false
   },
   "bilibili_check_interval": {
     "description": "B站检查间隔（秒）",

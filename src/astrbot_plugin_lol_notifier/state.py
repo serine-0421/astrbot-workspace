@@ -15,16 +15,23 @@ class NotificationState:
     elimination_updates: dict[str, str] = field(default_factory=dict)  # 淘汰赛/实时比赛状态指纹
 
     # ── 第三方平台动态去重 ──
-    bilibili_updates: set[str] = field(default_factory=set)    # LOL官号视频 BV 号
-    bilibili_bp_dynamics: set[str] = field(default_factory=set)  # BLG BP 动态 ID
-    weibo_updates: set[str] = field(default_factory=set)         # 微博帖子 ID
+    # 多账号 B站推送去重: uid → {id, ...}
+    bilibili_video_seen: dict[str, set[str]] = field(default_factory=dict)     # uid → {bvid, ...}
+    bilibili_dynamic_seen: dict[str, set[str]] = field(default_factory=dict)   # uid → {dynamic_id, ...}
+    weibo_updates: set[str] = field(default_factory=set)  # 微博帖子 ID
+
+    def _ensure_sets(self, d: dict[str, list | set]) -> dict[str, set[str]]:
+        """将 KV 反序列化后的 list 还原为 set。"""
+        return {k: set(v) if isinstance(v, list) else v for k, v in d.items()}
 
     def __post_init__(self) -> None:
         """KV 持久化时集合会被序列化为 list，加载时还原为 set。"""
-        for attr in ("bilibili_updates", "bilibili_bp_dynamics", "weibo_updates"):
+        for attr in ("bilibili_video_seen", "bilibili_dynamic_seen"):
             val = getattr(self, attr)
-            if isinstance(val, list):
-                setattr(self, attr, set(val))
+            if isinstance(val, dict):
+                setattr(self, attr, self._ensure_sets(val))
+        if isinstance(self.weibo_updates, list):
+            self.weibo_updates = set(self.weibo_updates)
 
 
 def default_state() -> NotificationState:

@@ -1,6 +1,6 @@
 # 🎮 AstrBot LoL Notifier
 
-LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、积分榜、战队详情。同时集成 B 站官号视频监控、BLG 战队 BP 图文推送、微博赛前海报抓取。
+LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / Worlds** 等 14 个赛区，提供赛程、实时比分、积分榜、战队详情。同时集成 3 个 B 站官号（视频+图文）、微博赛前海报抓取，支持每种内容类型独立开关。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后直接使用，无需额外配置。
 > 📡 数据来源：[PandaScore](https://pandascore.co)（主） + [citoapi](https://api.citoapi.com/api/v1/lol)（备用）
@@ -73,14 +73,14 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol bilibili` | B站 LOL 官号最新 5 条视频 | `/lol bilibili` |
+| `/lol bilibili` | 多账号 B站最新视频（3个官号） | `/lol bilibili` |
 | `/lol weibo` | 微博赛前海报最新 5 条 | `/lol weibo` |
 
 ### 🔹 订阅 & 管理
 
 | 命令 | 说明 |
 |:--|:--|
-| `/lol subscribe` | 订阅自动推送（赛程 / B站视频 / 微博海报） |
+| `/lol subscribe` | 订阅自动推送（赛程 / B站 / 微博海报） |
 | `/lol unsubscribe` | 取消当前会话的自动推送 |
 | `/lol apikey` | 查看当前 API Key 状态 |
 | `/lol apikey <新Key>` | 手动设置自定义 API Key（可选） |
@@ -117,8 +117,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 | 来源 | 功能 | 触发方式 |
 |:--|:--|:--|
-| 🔔 B站 LOL 官号 | 官方视频投稿推送 + 手动查询 | 订阅自动 / `/lol bilibili` |
-| 🔵 B站 BLG 官号 | BP 图文动态推送 | 订阅后自动 |
+| 🔔 B站 (3账号) | 视频 + 图文动态推送 + 手动查询 | 订阅自动 / `/lol bilibili` |
 | 📰 微博 | LPL 赛前海报推送 + 手动查询 | 订阅自动 / `/lol weibo` |
 
 ---
@@ -141,13 +140,25 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ### B站
 
+3 个账号，每种内容类型独立开关（直播暂未实现）：
+
+| 账号 | UID | 默认推送 |
+|:--|:--|:--|
+| 哔哩哔哩英雄联盟赛事 | 50329118 | 视频 ✅ · 图文 ✅ · 直播 ❌ |
+| 英雄联盟赛事 | 108532523 | 视频 ❌ · 图文 ✅ · 直播 ❌ |
+| BLG电子竞技俱乐部 | 268999208 | 视频 ✅ · 图文 ✅ · 直播 ❌ |
+
 | 配置项 | 类型 | 默认值 | 说明 |
 |:--|:--|:--|:--|
-| `bilibili_uid` | `string` | `"50329118"` | 英雄联盟赛事官号 UID |
-| `enable_bilibili_video_push` | `bool` | `true` | 推送 LOL 官号视频 |
-| `bilibili_blg_uid` | `string` | `"545271146"` | BLG 官号 UID |
-| `enable_bilibili_blg_bp_push` | `bool` | `true` | 推送 BLG BP 图文动态 |
-| `bilibili_check_interval` | `int` | `60` | B站检查间隔（秒） |
+| `bilibili_push_lol_video` | `bool` | `true` | 哔哩哔哩英雄联盟赛事 — 视频推送 |
+| `bilibili_push_lol_article` | `bool` | `true` | 哔哩哔哩英雄联盟赛事 — 图文推送 |
+| `bilibili_push_lol_live` | `bool` | `false` | 哔哩哔哩英雄联盟赛事 — 直播推送 |
+| `bilibili_push_lolesports_video` | `bool` | `false` | 英雄联盟赛事 — 视频推送 |
+| `bilibili_push_lolesports_article` | `bool` | `true` | 英雄联盟赛事 — 图文推送 |
+| `bilibili_push_lolesports_live` | `bool` | `false` | 英雄联盟赛事 — 直播推送 |
+| `bilibili_push_blg_video` | `bool` | `true` | BLG电子竞技俱乐部 — 视频推送 |
+| `bilibili_push_blg_article` | `bool` | `true` | BLG电子竞技俱乐部 — 图文推送 |
+| `bilibili_push_blg_live` | `bool` | `false` | BLG电子竞技俱乐部 — 直播推送 |
 
 > B站 Cookie 已硬编码在 `bilibili.py` 中（`_DEFAULT_COOKIE`），也可通过环境变量 `BILIBILI_COOKIE` 覆盖。无需在 WebUI 中配置。
 

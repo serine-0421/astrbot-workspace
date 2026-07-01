@@ -37,7 +37,7 @@ from .src.astrbot_plugin_lol_notifier.fetcher import api
 from .src.astrbot_plugin_lol_notifier.fetcher import bilibili as bili_fetcher
 from .src.astrbot_plugin_lol_notifier.fetcher import weibo as weibo_fetcher
 from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import get_api_key, set_api_key
-from .src.astrbot_plugin_lol_notifier.config import get_weibo_uids
+from .src.astrbot_plugin_lol_notifier.config import get_weibo_uids, BILIBILI_ACCOUNTS
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
 from .src.astrbot_plugin_lol_notifier.models import Failure, Success
@@ -69,7 +69,7 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol team info [name]              战队信息（可按名称筛选）
 
 ━━━ B站 / 微博 ━━━
-  /lol bilibili                      B站 LOL官号最新 5 条视频
+  /lol bilibili                      多账号 B站最新视频（3个官号）
   /lol weibo                         微博赛前海报最新 5 条
 
 ━━━ 赛区 ━━━
@@ -554,11 +554,18 @@ class LoLNotifierPlugin(Star):
         yield event.plain_result("\n".join(lines))
 
     async def _handle_bilibili(self, event):
-        items = await bili_fetcher.fetch_bilibili_updates()
-        if not items:
-            yield event.plain_result("📺 B站 LOL官号暂无可显示的视频。")
+        all_items: list[dict] = []
+        for account in BILIBILI_ACCOUNTS:
+            uid = account["uid"]
+            name = account["name"]
+            videos = await bili_fetcher.fetch_bilibili_updates(uid)
+            for v in videos[:3]:
+                v["_source"] = name
+                all_items.append(v)
+        if not all_items:
+            yield event.plain_result("📺 所有 B站 账号暂无可显示的视频。")
             return
-        yield event.plain_result(fmt.format_bilibili_update(items[:5]))
+        yield event.plain_result(fmt.format_bilibili_update(all_items[:5]))
 
     async def _handle_weibo(self, event):
         try:

@@ -24,9 +24,15 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Image, Plain
 
 from . import image_renderer as img
-from .config import get_weibo_uids, is_blg_bp_push_enabled, is_weibo_poster_push_enabled
+from .config import (
+    BILIBILI_ACCOUNTS,
+    get_weibo_uids,
+    is_bilibili_push_enabled,
+    is_any_bilibili_push_enabled,
+    is_weibo_poster_push_enabled,
+)
 from .fetcher import api as fetcher_api
-from .fetcher import bilibili, bilibili_dynamic, weibo
+from .fetcher import bilibili, weibo
 from .formatter import message as formatter
 from .models import Failure, LeagueMatch, LiveMatch, Success
 from .state import NotificationState, default_state
@@ -139,8 +145,8 @@ class LoLScheduler:
             "bp_round_notice": self._state.bp_round_notice,
             "post_round_notice": self._state.post_round_notice,
             "elimination_updates": self._state.elimination_updates,
-            "bilibili_updates": list(self._state.bilibili_updates),
-            "bilibili_bp_dynamics": list(self._state.bilibili_bp_dynamics),
+            "bilibili_video_seen": {k: list(v) for k, v in self._state.bilibili_video_seen.items()},
+            "bilibili_dynamic_seen": {k: list(v) for k, v in self._state.bilibili_dynamic_seen.items()},
             "weibo_updates": list(self._state.weibo_updates),
         }
         await self._star.put_kv_data("lol_state", state_dict)
@@ -170,14 +176,11 @@ class LoLScheduler:
 
         # ═══ 第三方平台推送（不消耗 citoapi 配额，每轮都执行） ═══
 
-        # 1. B站 LOL官号 → 视频更新
-        await self._check_bilibili_videos()
+        # 1. B站多账号 → 视频+图文动态 (per-account per-type toggle)
+        await self._check_bilibili_feeds()
 
         # 2. 微博各队官号 → 赛前海报 (LPL+预告)
         await self._check_weibo_posters()
-
-        # 3. B站 BLG官号 → BP图文动态
-        await self._check_blg_bp_dynamics()
 
         # ═══ citoapi 赛事推送（配额紧张时跳过） ═══
         if not SCHEDULER_API_ENABLED:
@@ -385,76 +388,100 @@ class LoLScheduler:
             await self._persist_state()
             logger.info(f"[LoLNotifier] Sent match final result for {match_key}")
 
-    async def _check_bilibili_videos(self) -> None:
-        """B站 LOL官号 (UID 50329118)：推送最新视频投稿"""
+    async def _check_bilibili_feeds(self) -> None:
+        """B站多账号统一推送：遍历所有账号，按 per-type toggle 拉取视频/图文动态。"""
+        if not is_any_bilibili_push_enabled(self._config):
+            return
+
         try:
-            updates = await bilibili.fetch_bilibili_updates()
+            for account in BILIBILI_ACCOUNTS:
+                uid = account["uid"]
+                key = account["key"]
+                name = account["name"]
+
+                # ── 视频 ──
+                if is_bilibili_push_enabled(self._config, key, "video"):
+                    await self._check_bilibili_videos_for_uid(uid, key, name)
+
+                # ── 图文动态 ──
+                if is_bilibili_push_enabled(self._config, key, "article"):
+                    await self._check_bilibili_dynamics_for_uid(uid, key, name)
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error checking bilibili feeds: {e}")
+
+    async def _check_bilibili_videos_for_uid(self, uid: str, key: str, name: str) -> None:
+        """拉取指定 UID 的视频投稿并推送"""
+        try:
+            updates = await bilibili.fetch_bilibili_updates(uid)
             if not updates:
                 return
 
-            # 首次运行不推送，仅记录已有视频避免后续重复
-            if not self._state.bilibili_updates:
+            seen = self._state.bilibili_video_seen.get(uid, set())
+
+            # 首次运行仅记录
+            if not seen:
                 for item in updates:
-                    self._state.bilibili_updates.add(item.get("bvid", ""))
+                    seen.add(item.get("bvid", ""))
+                self._state.bilibili_video_seen[uid] = seen
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] Bilibili-video: first run, recorded {len(updates)} existing videos")
+                logger.info(f"[LoLNotifier] B站-{name}: first run, recorded {len(updates)} existing videos")
                 return
 
-            new_updates = []
             now_ts = int(datetime.now(timezone.utc).timestamp())
+            new_items = []
             for item in updates:
                 bvid = item.get("bvid", "")
-                if not bvid or bvid in self._state.bilibili_updates:
+                if not bvid or bvid in seen:
                     continue
                 pubdate = item.get("pubdate", 0)
                 if now_ts - pubdate > POLL_INTERVAL * 3:
                     continue
-                new_updates.append(item)
-                self._state.bilibili_updates.add(bvid)
+                new_items.append(item)
+                seen.add(bvid)
 
-            if new_updates:
-                text = formatter.format_bilibili_update(new_updates)
+            if new_items:
+                self._state.bilibili_video_seen[uid] = seen
+                text = formatter.format_bilibili_update(new_items)
                 await self._broadcast(text, None)
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] Sent {len(new_updates)} bilibili video(s)")
+                logger.info(f"[LoLNotifier] B站-{name}: sent {len(new_items)} video(s)")
         except Exception as e:
-            logger.error(f"[LoLNotifier] Error checking bilibili videos: {e}")
+            logger.error(f"[LoLNotifier] Error checking B站 videos for {name}: {e}")
 
-    # ── BLG BP 图文动态 ──
-
-    async def _check_blg_bp_dynamics(self) -> None:
-        """B站 BLG官号 (UID 545271146)：推送含"BP"的图文动态"""
-        if not is_blg_bp_push_enabled(self._config):
-            return
-
+    async def _check_bilibili_dynamics_for_uid(self, uid: str, key: str, name: str) -> None:
+        """拉取指定 UID 的图文动态（含视频转发）并推送"""
         try:
-            dynamics = await bilibili_dynamic.fetch_blg_bp_dynamics()
+            dynamics = await bilibili.fetch_bilibili_dynamics(uid)
             if not dynamics:
                 return
 
+            seen = self._state.bilibili_dynamic_seen.get(uid, set())
+
             # 首次运行仅记录
-            if not self._state.bilibili_bp_dynamics:
+            if not seen:
                 for item in dynamics:
-                    self._state.bilibili_bp_dynamics.add(item.get("dynamic_id", ""))
+                    seen.add(item.get("dynamic_id", ""))
+                self._state.bilibili_dynamic_seen[uid] = seen
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] BLG-BP: first run, recorded {len(dynamics)} existing dynamics")
+                logger.info(f"[LoLNotifier] B站-{name}: first run, recorded {len(dynamics)} existing dynamics")
                 return
 
             new_items = []
             for item in dynamics:
                 dyn_id = item.get("dynamic_id", "")
-                if not dyn_id or dyn_id in self._state.bilibili_bp_dynamics:
+                if not dyn_id or dyn_id in seen:
                     continue
                 new_items.append(item)
-                self._state.bilibili_bp_dynamics.add(dyn_id)
+                seen.add(dyn_id)
 
             if new_items:
+                self._state.bilibili_dynamic_seen[uid] = seen
                 text = formatter.format_bilibili_bp_update(new_items)
                 await self._broadcast(text, None)
                 await self._persist_state()
-                logger.info(f"[LoLNotifier] Sent {len(new_items)} BLG BP dynamic(s)")
+                logger.info(f"[LoLNotifier] B站-{name}: sent {len(new_items)} dynamic(s)")
         except Exception as e:
-            logger.error(f"[LoLNotifier] Error checking BLG BP dynamics: {e}")
+            logger.error(f"[LoLNotifier] Error checking B站 dynamics for {name}: {e}")
 
     # ── 微博赛前海报 ──
 
