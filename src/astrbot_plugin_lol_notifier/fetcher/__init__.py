@@ -28,6 +28,8 @@ from .api import (
     get_player,
     get_player_stats,
     get_players,
+    get_rune,
+    get_rune_path,
     get_rune_paths,
     get_runes,
     get_schedule,
@@ -87,7 +89,9 @@ __all__ = [
     "get_spells",
     "get_spell",
     "get_runes",
+    "get_rune",
     "get_rune_paths",
+    "get_rune_path",
     "get_masteries",
     # === players ===
     "get_players",

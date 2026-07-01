@@ -18,7 +18,7 @@ Commands (prefix /lol):
     /lol champions [version]   | champion <id>
     /lol items [version]        | item <id>
     /lol spells    | spell <id>
-    /lol runes [paths]
+    /lol runes [paths|path <id>]  | rune <id>
     /lol masteries
     /lol series [league] [status] | series detail <id>
     /lol players [league]   | player <id> | player stats <id>
@@ -94,8 +94,10 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol item <id_or_slug>               单个装备
   /lol spells                          召唤师技能
   /lol spell <id>                      单个技能
-  /lol runes                           符文列表
-  /lol runes paths                     符文系
+  /lol runes                           符文列表 (reforged)
+  /lol rune <id>                       单个符文详情
+  /lol runes paths                     符文系列表
+  /lol runes path <id>                 单个符文系详情
   /lol masteries                       天赋列表
 
 ━━━ B站 / 微博 ━━━
@@ -351,9 +353,24 @@ class LoLNotifierPlugin(Star):
                 if sub2 == "paths":
                     async for m in _result(self._handle_rune_paths(event)):
                         yield m
+                elif sub2 == "path":
+                    pid = args[1] if len(args) > 1 else ""
+                    if pid:
+                        async for m in _result(self._handle_rune_path(event, pid)):
+                            yield m
+                    else:
+                        yield event.plain_result("❌ 用法: /lol runes path <id>")
                 else:
                     async for m in _result(self._handle_runes(event)):
                         yield m
+
+            elif sub_cmd == "rune":
+                rid = args[0] if len(args) > 0 else ""
+                if rid:
+                    async for m in _result(self._handle_rune(event, rid)):
+                        yield m
+                else:
+                    yield event.plain_result("❌ 用法: /lol rune <id>")
 
             elif sub_cmd == "masteries":
                 async for m in _result(self._handle_masteries(event)):
@@ -631,7 +648,14 @@ class LoLNotifierPlugin(Star):
                 if isinstance(data, list):
                     if team_id.strip():
                         keyword = team_id.strip().lower()
-                        filtered = [t for t in data if isinstance(t, dict) and keyword in str(t.get("name", t.get("slug", ""))).lower()]
+                        filtered = [
+                            t for t in data
+                            if isinstance(t, dict) and (
+                                keyword in str(t.get("name", "")).lower()
+                                or keyword in str(t.get("acronym", "")).lower()
+                                or keyword in str(t.get("slug", "")).lower()
+                            )
+                        ]
                         if filtered:
                             yield event.plain_result(fmt.format_team_info({"teams": filtered}))
                         else:
@@ -838,6 +862,22 @@ class LoLNotifierPlugin(Star):
 
     async def _handle_rune_paths(self, event):
         result = await api.get_rune_paths()
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_rune_paths(data))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    async def _handle_rune(self, event, rune_id: str):
+        result = await api.get_rune(rune_id)
+        match result:
+            case Success(value=data):
+                yield event.plain_result(fmt.format_runes(data, limit=1))
+            case Failure(error=err):
+                yield event.plain_result(f"❌ {err}")
+
+    async def _handle_rune_path(self, event, path_id: str):
+        result = await api.get_rune_path(path_id)
         match result:
             case Success(value=data):
                 yield event.plain_result(fmt.format_rune_paths(data))

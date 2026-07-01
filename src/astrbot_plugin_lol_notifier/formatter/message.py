@@ -28,11 +28,25 @@ def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     for match in sorted_matches[:limit]:
         teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
         round_info = f"第{match.round}场 " if match.round else ""
+        status_icon = {"completed": "✅", "finished": "✅", "live": "🔴", "in_progress": "🔴"}.get(
+            match.status, "⏳"
+        )
         lines.append(
-            f"[{match.league.upper()} · {match.stage}] {round_info}{teams}\n"
+            f"{status_icon} [{match.league.upper()} · {match.stage}] {round_info}{teams}\n"
             f"  时间: {match.start_date} {match.start_time}\n"
             f"  场馆: {match.arena or '未知'}"
         )
+        # 已结束的比赛附加结果
+        if match.status in ("completed", "finished") and match.games:
+            winners = [g.winner for g in match.games if g.winner]
+            if winners:
+                score_parts = []
+                for t in match.teams:
+                    wins = winners.count(t)
+                    score_parts.append(f"{t}({wins})")
+                lines.append(f"  结果: {' vs '.join(score_parts)}")
+        if match.status in ("live", "in_progress") and match.summary:
+            lines.append(f"  比分: {match.summary}")
     return "\n".join(lines)
 
 
@@ -603,12 +617,40 @@ def format_tournament_teams_stats(raw: Any, limit: int = 15) -> str:
 
 
 def format_team_info(data: dict) -> str:
-    """格式化单个战队信息。"""
-    name = data.get("name", data.get("code", "未知战队"))
-    region = data.get("region", data.get("league", ""))
+    """格式化战队信息。支持单队 dict 或 {"teams": [...]} 批量格式。"""
+    # 批量格式：{"teams": [...]}
+    teams_list = data.get("teams")
+    if teams_list and isinstance(teams_list, list):
+        if not teams_list:
+            return "🏢 暂无战队数据。"
+        lines = [f"🏢 共 {len(teams_list)} 支战队：\n"]
+        for t in teams_list:
+            if not isinstance(t, dict):
+                continue
+            name = t.get("name") or t.get("acronym") or "?"
+            region = t.get("location", t.get("home_league", {}).get("name", "")) if isinstance(
+                t.get("home_league"), dict
+            ) else t.get("location", "")
+            acronym = t.get("acronym", "")
+            slug = t.get("slug", "")
+            lines.append(f"  • {name}" + (f" ({acronym})" if acronym else ""))
+            if region:
+                lines.append(f"    赛区: {region}")
+            if slug:
+                lines.append(f"    标识: {slug}")
+        return "\n".join(lines)
+
+    # 单队格式
+    name = data.get("name", data.get("code", data.get("acronym", "未知战队")))
+    region = data.get("location", data.get("region", data.get("league", "")))
+    if isinstance(region, dict):
+        region = region.get("name", "")
     slug = data.get("slug", "")
+    acronym = data.get("acronym", "")
     image = data.get("image", data.get("logoUrl", ""))
     lines = [f"🏢 {name}"]
+    if acronym:
+        lines.append(f"缩写: {acronym}")
     if region:
         lines.append(f"赛区: {region}")
     if slug:

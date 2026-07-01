@@ -10,8 +10,8 @@ LoL 电竞赛事推送与查询插件，覆盖 **LCK / LPL / LEC / LCS / MSI / W
 ```mermaid
 flowchart LR
     CMD["/lol 命令"] --> API["api.py<br/>统一入口"]
-    API --> PS["PandaScore<br/>Bearer Token"]
-    API --> CITO["citoapi<br/>x-api-key"]
+    API --> PS["PandaScore<br/>主数据源<br/>Bearer Token"]
+    API --> CITO["citoapi<br/>备用回退<br/>x-api-key"]
     PS -->|成功| RESULT["返回结果"]
     PS -->|失败| CITO
     CITO --> RESULT
@@ -135,12 +135,14 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ### 🔹 lol runes — 符文
 
-> PandaScore: `GET /lol/runes` · `GET /lol/runes/{id}` · `GET /lol/runes-reforged` · `GET /lol/runes-reforged-paths`
+> PandaScore: `GET /lol/runes` · `GET /lol/runes/{id}` · `GET /lol/runes-reforged` · `GET /lol/runes-reforged/{id}` · `GET /lol/runes-reforged-paths` · `GET /lol/runes-reforged-paths/{id}`
 
 | 命令 | 说明 | 示例 |
 |:--|:--|:--|
-| `/lol runes` | 符文列表 | `/lol runes` |
-| `/lol runes paths` | 符文路径 | `/lol runes paths` |
+| `/lol runes` | 符文列表（reforged） | `/lol runes` |
+| `/lol rune <id>` | 单个符文详情 | `/lol rune 5001` |
+| `/lol runes paths` | 符文系列表 | `/lol runes paths` |
+| `/lol runes path <id>` | 单个符文系详情 | `/lol runes path 8100` |
 
 ### 🔹 lol masteries — 天赋
 
@@ -223,11 +225,15 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 |:--|:--|:--|:--|
 | `enable_image_render` | `bool` | `false` | 开启 HTML 图片渲染模式（需 Pillow） |
 
-### citoapi
+### API Key
+
+插件内置 PandaScore 和 citoapi 的 API Key，开箱即用：
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |:--|:--|:--|:--|
-| `cito_api_key` | `string` | `""` | 自定义 API Key。留空则使用内置 Key。也可设环境变量 `CITO_API_KEY` |
+| `cito_api_key` | `string` | `""` | 自定义 citoapi Key。留空则使用内置 Key。也可设环境变量 `CITO_API_KEY` |
+
+> PandaScore 的 API Key 已内置在代码中，无需额外配置。
 
 ### B站
 
@@ -287,9 +293,10 @@ astrbot_plugin_lol_notifier/
         ├── state.py            # 推送去重状态管理
         ├── utils.py            # 工具函数
         ├── fetcher/            # 数据抓取层
-        │   ├── __init__.py          # 导出 18 个 api 函数 + B站/微博抓取器
-        │   ├── api.py               # 数据访问封装（40+ 端点 + TTL 缓存）
-        │   ├── lolesports.py        # citoapi HTTP 网络层（30 个官方端点）
+        │   ├── __init__.py          # 导出 30+ 个 api 函数 + B站/微博抓取器
+        │   ├── api.py               # 数据访问封装（PandaScore 优先 + citoapi 回退 + TTL 缓存）
+        │   ├── pandascore.py        # PandaScore HTTP 客户端（主数据源，Bearer Token）
+        │   ├── lolesports.py        # citoapi HTTP 客户端（备用数据源，x-api-key）
         │   ├── bilibili.py          # B站 API
         │   ├── bilibili_dynamic.py  # B站动态 API
         │   └── weibo.py             # 微博 API
@@ -306,10 +313,11 @@ astrbot_plugin_lol_notifier/
 main.py → LoLNotifierPlugin（命令解析 & 路由）
     ↓
 fetcher/api.py → 数据访问层（league 校验 + TTL 缓存 + Result 封装）
-    ↓
-fetcher/lolesports.py → citoapi HTTP 请求（_request + 速率限制 + 指数退避）
-    ↓
-citoapi (https://api.citoapi.com/api/v1)
+    ↓                        ↓
+fetcher/pandascore.py      fetcher/lolesports.py
+（主数据源，Bearer Token）   （备用回退，x-api-key）
+    ↓                        ↓
+PandaScore API              citoapi API
     ↓
 formatter/message.py → 格式化输出（文本 / 图片）
     ↓
@@ -323,9 +331,9 @@ AstrBot 消息通道（QQ / Telegram / WebChat）
 | 层 | 职责 | 关键模块 |
 |:--|:--|:--|
 | **命令层** | 解析用户指令，参数校验，结果分发 | `main.py` |
-| **数据访问层** | TTL 缓存、league 校验、Result 模式封装 | `fetcher/api.py` |
-| **网络层** | HTTP 请求、速率限制（6s）、指数退避（429） | `fetcher/lolesports.py` |
-| **格式化层** | 19 个 formatter 将数据转为可读消息 | `formatter/message.py` |
+| **数据访问层** | TTL 缓存、league 校验、PandaScore 优先 + citoapi 回退 | `fetcher/api.py` |
+| **网络层** | HTTP 请求、速率限制、指数退避（429） | `fetcher/pandascore.py`（主） + `fetcher/lolesports.py`（备） |
+| **格式化层** | 将数据转为可读消息 | `formatter/message.py` |
 | **渲染层** | HTML 模板 → Pillow 图片渲染 | `image_renderer.py` |
 | **调度层** | 定时推送赛程/B站/微博更新 | `scheduler.py` |
 
@@ -339,107 +347,112 @@ AstrBot 消息通道（QQ / Telegram / WebChat）
 
 ## ⚠️ 已知限制 (Known Limitations)
 
-以下功能依赖 citoapi 的特定端点，可能因 API 覆盖范围或不支持而返回空数据：
+### 数据源架构
 
-| 功能 | 状态 | 说明 |
+| 层级 | 数据源 | 覆盖范围 |
 |:--|:--|:--|
-| 赛程查询 (schedule/next/today/week) | ✅ 正常 | 覆盖 LCK/LPL 等主要赛区，支持无赛程时自动跨赛区回退 |
-| 实时比赛 (live) | ✅ 正常 | 需要比赛正在进行中，支持实时系列赛+视觉状态 |
-| 比赛结果/详情 (result/detail/bp) | ✅ 正常 | 自动获取详细对局数据，无比赛时回退到基础信息 |
-| 比赛覆盖率 (coverage) | ✅ 正常 | `/lol coverage [赛区]` 查询 API 覆盖的比赛范围 |
-| 积分榜 (standings) | ✅ 正常 | 赛季进行中数据更完整 |
-| 对局数据 (plates/distributions/vision/jungle) | ✅ 正常 | 装备购买/伤害分布/视野得分/打野占比 |
-| 战队信息/阵容 (team info) | ✅ 正常 | 支持名称直接匹配 |
-| 战队搜索 (team search) | ⚠️ 部分 | 搜索 API 可能不稳定，支持直接名称回退 |
-| 战队交手记录 (team h2h) | ⚠️ 部分 | API 数据可能为空 |
-| 选手搜索/信息 (player search/info) | ⚠️ 部分 | 依赖 API 选手数据库覆盖 |
-| 选手奖金 (player earnings) | ✅ 正常 | 查询选手生涯奖金汇总 |
-| 转会详情 (transfers player/team) | ✅ 正常 | 支持按选手或战队查询转会历史 |
-| 世界赛查询 (tournament *) | ⚠️ 部分 | `/lol/tournaments/*` 端点可能在 citoapi 中不可用 |
-| 英雄统计 (champion stats) | ⚠️ 部分 | `/lol/champions/stats` 端点可能返回空数据 |
-| 英雄 Pick/Ban 率 (champion presence) | ⚠️ 部分 | 同上 |
-| 全球战力排名 (ranking gpr) | ⚠️ 部分 | `/lol/rankings/gpr` 端点可能不可用 |
-| 热门趋势 (trending) | ⚠️ 部分 | 取决于 API 数据更新频率 |
-| 历史赛事 (history) | ⚠️ 部分 | 数据可能不完整或有格式差异 |
-| 转会信息 (transfers) | ⚠️ 部分 | 字段名可能与 API 返回不完全匹配 |
-| 赛事记录 (records) | ⚠️ 部分 | 同上 |
+| **主数据源** | [PandaScore](https://pandascore.co) | 赛程、实时比分、积分榜、联赛、系列赛、锦标赛、战队、选手、统计数据、游戏数据（英雄/装备/符文/技能） |
+| **备用数据源** | [citoapi](https://api.citoapi.com/api/v1) | 赛程、实时比分、积分榜、比赛结果/详情（仅当 PandaScore 不可用时回退） |
 
-> 💡 标记为 ⚠️ 的功能取决于 citoapi 的数据覆盖。如果 API 返回空数据，插件会显示相应的提示信息。建议优先使用标记为 ✅ 的稳定功能。
+### 功能状态一览
 
----
-
-## � 功能状态
-
-### 赛程 & 比赛
-
-| 命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `lol schedule` | ✅ 正常 | 完整赛程查询 |
-| `lol next` | ✅ 正常 | 自动区分过去/未来比赛 |
-| `lol today` | ✅ 正常 | 今日赛程 |
-| `lol week` | ✅ 正常 | 本周赛程 |
-| `lol live` | ✅ 正常 | 实时比赛需赛事进行中 |
-| `lol result` | ✅ 正常 | 支持 `round` 或 `match_id` 匹配 |
-| `lol bp` | ✅ 正常 | 需比赛已完成且 API 有 BP 数据 |
-| `lol detail` | ✅ 正常 | 需比赛已完成且有详情 |
-| `lol standings` | ✅ 正常 | 多路径数据提取 |
-
-### 战队 (`/lol team`)
-
-| 子命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `search` | ✅ 正常 | 建议使用英文名，大小写敏感 |
-| `info` | ⚠️ 部分 | API 数据覆盖取决于 citoapi |
-| `roster` | ✅ 正常 | 修复：角色排序+多字段名匹配 |
-| `matches` | ✅ 正常 | 近期比赛记录 |
-| `stats` | ✅ 正常 | 赛季统计 |
-| `h2h` | ✅ 正常 | 历史交手记录 |
-
-### 选手 (`/lol player`)
-
-| 子命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `search` | ✅ 正常 | 建议使用英文 ID（如 Faker），大小写敏感 |
-| `info` | ⚠️ 部分 | API 数据覆盖取决于 citoapi |
-| `stats` | ✅ 正常 | 赛季统计数据 |
-| `champions` | ✅ 正常 | 英雄池与使用率 |
-
-### 锦标赛 (`/lol tournament`)
-
-| 子命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `info` | ✅ 正常 | 已修复：slug 解析+回退 |
-| `standings` | ✅ 正常 | slug 回退支持 |
-| `bracket` | ✅ 正常 | 淘汰赛对阵图 |
-| `mvp` | ✅ 正常 | slug 回退支持 |
-
-### 英雄 & 排行
-
-| 命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `lol champion stats` | ⚠️ 部分 | 需要对应赛区赛季有数据 |
-| `lol champion presence` | ⚠️ 部分 | 仅在活跃赛季有数据 |
-| `lol ranking gpr` | ⚠️ 部分 | 依赖 API 是否已发布该期 GPR |
-| `lol ranking players` | ✅ 正常 | 选手数据排名 |
-| `lol leaderboard` | ✅ 正常 | 赛区内排行榜 |
-
-### 其他查询
-
-| 命令 | 状态 | 备注 |
-|:--|:--|:--|
-| `lol trending` | ✅ 正常 | 修复：显示具体内容而非仅计数 |
-| `lol history` | ⚠️ 部分 | 已增强字段匹配；数据质量取决于 API |
-| `lol transfers` | ⚠️ 部分 | 已增强多字段名匹配；数据质量取决于 API |
-| `lol records` | ⚠️ 部分 | 历史记录依赖于 API 覆盖 |
+| 功能 | 状态 | 数据源 | 说明 |
+|:--|:--|:--|:--|
+| 赛程查询 (schedule/next/today) | ✅ 正常 | PandaScore → citoapi | 覆盖 LCK/LPL 等 14 个赛区，支持无赛程时自动跨赛区回退 |
+| 实时比赛 (live) | ✅ 正常 | PandaScore → citoapi | 需要比赛正在进行中 |
+| 比赛结果/详情 (result/detail) | ✅ 正常 | PandaScore → citoapi | 自动获取详细对局数据 |
+| 积分榜 (standings) | ✅ 正常 | PandaScore → citoapi | 赛季进行中数据更完整 |
+| 对局事件/帧 (game events/frames) | ✅ 正常 | PandaScore | 对局内详细事件与时间轴帧数据 |
+| 战队信息 (team info) | ✅ 正常 | PandaScore | 支持名称直接模糊匹配 |
+| 战队统计 (team stats) | ✅ 正常 | PandaScore | 赛季统计数据 |
+| 选手列表/信息 (players/player) | ✅ 正常 | PandaScore | 依赖 PandaScore 选手数据库覆盖 |
+| 选手统计 (player stats) | ✅ 正常 | PandaScore | 赛季统计数据 |
+| 系列赛 (series) | ✅ 正常 | PandaScore | 支持按赛区和状态筛选 |
+| 锦标赛 (tournaments) | ✅ 正常 | PandaScore | 支持按赛区和状态筛选 |
+| 英雄/装备/符文/技能 | ✅ 正常 | PandaScore | 参考数据，无回退 |
+| 比赛选手统计 (match stats) | ✅ 正常 | PandaScore | 单场比赛的选手数据 |
+| B站动态 | ✅ 正常 | B站 API | 三个账号独立内容类型开关 |
+| 微博海报 | ✅ 正常 | 微博 API | 英雄联盟赛事赛前海报 |
 
 ### 已知局限性
 
-- **搜索大小写敏感**：`/lol player search Faker` 必须大小写完全匹配 API 中的记录
-- **非活跃赛季**：休赛期 standings/stats/champion 可能返回空数据
+- **PandaScore 速率限制**：PandaScore API 有请求频率限制，短时间内大量请求可能触发限流，插件已内置速率控制和 TTL 缓存以缓解
+- **非活跃赛季**：休赛期 standings/stats 等数据可能返回空
 - **实时数据**：`/lol live` 仅在有正在进行的官方比赛时可获取
-- **API 覆盖**：citoapi 对部分赛区/赛季/锦标赛的数据覆盖可能不完整
-- **转会数据**：API 返回的数据字段名可能不一致，虽然增加了多字段匹配，部分条目仍可能显示为空
+- **选手覆盖**：PandaScore 的选手数据库对非顶级联赛的覆盖可能不完整
+- **参考数据**：英雄/装备/符文/技能等参考数据仅依赖 PandaScore，无备用数据源
+- **citoapi 回退**：当 PandaScore 不可用时自动回退到 citoapi，但 citoapi 仅覆盖核心赛程/比分/积分榜功能
 
-## �📝 License
+---
+
+## 📊 功能状态
+
+所有功能以 **PandaScore 为主数据源**，citoapi 作为赛程/比分/积分榜的备用回退。以下状态基于实际命令集。
+
+### 赛程 & 比赛
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol schedule` | PandaScore → citoapi | ✅ 正常 | 完整赛程查询，按距今天最近排序（默认 LPL，最近 5 场） |
+| `/lol next` | PandaScore → citoapi | ✅ 正常 | 下一场未开赛的完整时间表 |
+| `/lol today` | PandaScore → citoapi | ✅ 正常 | 今日所有赛程 |
+| `/lol live` | PandaScore → citoapi | ✅ 正常 | 正在进行的实时比赛（击杀/经济/塔/龙） |
+| `/lol result` | PandaScore → citoapi | ✅ 正常 | 比赛结果（默认最近一场） |
+| `/lol detail` | PandaScore → citoapi | ✅ 正常 | 比赛完整详情（含对局数据） |
+| `/lol standings` | PandaScore → citoapi | ✅ 正常 | 积分榜 / 排名 |
+
+### 对局 & 比赛扩展
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol game info <id>` | PandaScore | ✅ 正常 | 单局详情 |
+| `/lol game events <id>` | PandaScore | ✅ 正常 | 对局事件（击杀/推塔/打龙等） |
+| `/lol game frames <id>` | PandaScore | ✅ 正常 | 对局帧数据（时间轴） |
+| `/lol match games <id>` | PandaScore | ✅ 正常 | 比赛所有对局 |
+| `/lol match stats <id>` | PandaScore | ✅ 正常 | 比赛选手统计 |
+
+### 战队 & 选手
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol team info [name]` | PandaScore | ✅ 正常 | 查看所有战队或按名称模糊筛选 |
+| `/lol team stats <id>` | PandaScore | ✅ 正常 | 战队赛季统计 |
+| `/lol players [league]` | PandaScore | ✅ 正常 | 选手列表 |
+| `/lol player <id>` | PandaScore | ✅ 正常 | 选手信息 |
+| `/lol player stats <id>` | PandaScore | ✅ 正常 | 选手赛季统计 |
+
+### 系列赛 & 锦标赛
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol series [league] [status]` | PandaScore | ✅ 正常 | 系列赛列表（status: past/running/upcoming） |
+| `/lol series detail <id>` | PandaScore | ✅ 正常 | 系列赛详情 |
+| `/lol tournaments [league] [status]` | PandaScore | ✅ 正常 | 锦标赛列表 |
+| `/lol tournament <id>` | PandaScore | ✅ 正常 | 锦标赛详情 |
+
+### 参考数据（游戏静态数据）
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol champions [version]` | PandaScore | ✅ 正常 | 英雄列表 |
+| `/lol champion <id_or_slug>` | PandaScore | ✅ 正常 | 单个英雄详情 |
+| `/lol items [version]` | PandaScore | ✅ 正常 | 装备列表 |
+| `/lol item <id_or_slug>` | PandaScore | ✅ 正常 | 单个装备详情 |
+| `/lol spells` | PandaScore | ✅ 正常 | 召唤师技能列表 |
+| `/lol spell <id>` | PandaScore | ✅ 正常 | 单个技能详情 |
+| `/lol runes` | PandaScore | ✅ 正常 | 符文列表（reforged） |
+| `/lol rune <id>` | PandaScore | ✅ 正常 | 单个符文详情 |
+| `/lol runes paths` | PandaScore | ✅ 正常 | 符文系列表 |
+| `/lol runes path <id>` | PandaScore | ✅ 正常 | 单个符文系详情 |
+| `/lol masteries` | PandaScore | ✅ 正常 | 天赋列表 |
+
+### 第三方平台
+
+| 命令 | 数据源 | 状态 | 备注 |
+|:--|:--|:--|:--|
+| `/lol bilibili` | B站 API | ✅ 正常 | 三个 B 站账号综合动态（视频/图文/直播） |
+| `/lol weibo` | 微博 API | ✅ 正常 | 英雄联盟赛事微博赛前海报 |
+
+## 📝 License
 
 MIT © [MareDevi](https://github.com/MareDevi)

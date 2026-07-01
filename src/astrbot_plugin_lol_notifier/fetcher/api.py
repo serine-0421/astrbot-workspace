@@ -29,6 +29,7 @@ from ..models import (
     LiveResult,
     ResultResult,
     ScheduleResult,
+    StandingEntry,
     StandingsResult,
     Success,
 )
@@ -295,6 +296,10 @@ async def get_standings(
     logger.info(f"[api] Pandascore standings 失败，回退 citoapi ({league_n})")
     from .lolesports import fetch_standings as cito_standings
     result = await cito_standings(league=league_n)
+    if result.ok and isinstance(result.value, dict):
+        # citoapi 返回原始 dict，需转为 StandingEntry 列表
+        entries = _parse_standings_from_raw(result.value)
+        result = Success(value=entries)
     _cache_set(cache_key, result, _STANDINGS_CACHE_TTL)
     return result
 
@@ -490,6 +495,40 @@ def _pick_match(matches: list[LeagueMatch], round_number: int | str) -> LeagueMa
     return None
 
 
+def _parse_standings_from_raw(raw: dict) -> list[StandingEntry]:
+    """将 citoapi 或 Pandascore 的原始 standings JSON 转为 StandingEntry 列表。
+
+    兼容多种响应格式：
+      - {"data": [...]}  (citoapi)
+      - [{"rank":1, "team":{"name":"T1"}, "wins":10, ...}]  (citoapi standings array)
+      - 直接 list[dict]
+    """
+    data_list: list[dict] = []
+    if isinstance(raw, list):
+        data_list = raw
+    elif isinstance(raw, dict):
+        data_list = raw.get("data", raw.get("standings", raw.get("entries", [])))
+        if isinstance(data_list, dict):
+            data_list = list(data_list.values())
+        if not isinstance(data_list, list):
+            data_list = []
+
+    entries: list[StandingEntry] = []
+    for item in data_list:
+        if not isinstance(item, dict):
+            continue
+        team = item.get("team", {}) or {}
+        entries.append(StandingEntry(
+            rank=item.get("rank", 0) or 0,
+            team_name=team.get("name") or team.get("code") or team.get("acronym") or str(item.get("team_name", "?")),
+            wins=item.get("wins", 0) or 0,
+            losses=item.get("losses", 0) or 0,
+            points=item.get("points", 0) or 0,
+            status=item.get("status", "") or "",
+        ))
+    return entries
+
+
 # ═══════════════════════════════════════════════════
 #  参考数据 — Champions / Items / Spells / Runes / Masteries
 # ═══════════════════════════════════════════════════
@@ -581,6 +620,30 @@ async def get_rune_paths() -> JsonResult:
         return cached
     from .pandascore import fetch_rune_paths
     r = await fetch_rune_paths()
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_rune(rune_id: int | str) -> JsonResult:
+    """获取单个 reforged 符文 GET /lol/runes-reforged/{id}"""
+    cache_key = _cache_key("rune_ps", str(rune_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_rune_reforged
+    r = await fetch_rune_reforged(rune_id)
+    _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
+    return r
+
+
+async def get_rune_path(path_id: int | str) -> JsonResult:
+    """获取单个符文路径 GET /lol/runes-reforged-paths/{id}"""
+    cache_key = _cache_key("rune_path_ps", str(path_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    from .pandascore import fetch_rune_path as ps_rune_path
+    r = await ps_rune_path(path_id)
     _cache_set(cache_key, r, _REFERENCE_CACHE_TTL)
     return r
 
