@@ -127,7 +127,7 @@ def format_match_basic(match: LeagueMatch) -> str:
             lines.append(f"结果: {' vs '.join(score_parts)}")
 
     if match.match_id:
-        lines.append(f"\n💡 使用 /lol detail {match.league} {match.round or match.match_id} 查看详细对局数据")
+        lines.append("\n💡 详细对局数据需要 Pandascore 高级套餐，当前套餐不可用。")
     return "\n".join(lines)
 
 
