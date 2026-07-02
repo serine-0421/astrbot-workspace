@@ -462,7 +462,7 @@ async def fetch_matches(
     params: dict[str, Any] = {
         "page": page,
         "per_page": per_page,
-        "sort": "scheduled_at",
+        "sort": "-scheduled_at" if status == "past" else "scheduled_at",
     }
     if league_id is not None:
         params["filter[league_id]"] = league_id
