@@ -644,14 +644,22 @@ class LoLNotifierPlugin(Star):
                 if isinstance(data, list):
                     if team_id.strip():
                         keyword = team_id.strip().lower()
-                        filtered = [
-                            t for t in data
-                            if isinstance(t, dict) and (
-                                keyword in str(t.get("name", "")).lower()
-                                or keyword in str(t.get("acronym", "")).lower()
-                                or keyword in str(t.get("slug", "")).lower()
-                            )
-                        ]
+                        tokens = [tok for tok in keyword.replace("-", " ").split() if tok]
+                        filtered = []
+                        for t in data:
+                            if not isinstance(t, dict):
+                                continue
+                            haystack = " ".join([
+                                str(t.get("name", "")),
+                                str(t.get("acronym", "")),
+                                str(t.get("slug", "")),
+                                str(t.get("location", "")),
+                                str(t.get("code", "")),
+                            ]).lower()
+                            if not haystack:
+                                continue
+                            if all(tok in haystack for tok in tokens):
+                                filtered.append(t)
                         if filtered:
                             yield event.plain_result(fmt.format_team_info({"teams": filtered}))
                         else:

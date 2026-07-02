@@ -116,6 +116,16 @@ def format_match_basic(match: LeagueMatch) -> str:
     ]
     if match.arena:
         lines.append(f"场馆: {match.arena}")
+
+    if match.games:
+        winners = [g.winner for g in match.games if g.winner]
+        if winners:
+            score_parts = []
+            for t in match.teams:
+                wins = winners.count(t)
+                score_parts.append(f"{t}({wins})")
+            lines.append(f"结果: {' vs '.join(score_parts)}")
+
     if match.match_id:
         lines.append(f"\n💡 使用 /lol detail {match.league} {match.round or match.match_id} 查看详细对局数据")
     return "\n".join(lines)

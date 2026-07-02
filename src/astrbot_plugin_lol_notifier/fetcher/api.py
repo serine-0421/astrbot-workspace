@@ -176,7 +176,8 @@ async def get_match_result(
     if isinstance(round_number, str) and round_number.lower() == "last":
         completed = [m for m in matches if m.status in ("completed", "finished")]
         if completed:
-            return Success(value=completed[-1])
+            completed.sort(key=lambda m: (m.start_date, m.start_time, m.match_id), reverse=True)
+            return Success(value=completed[0])
         return Success(value=matches[-1] if matches else None)
     r = str(round_number)
     for m in matches:
@@ -494,6 +495,10 @@ async def get_game_detail(game_id: str) -> JsonResult:
 
 def _pick_match(matches: list[LeagueMatch], round_number: int | str) -> LeagueMatch | None:
     if isinstance(round_number, str) and round_number.lower() == "last":
+        completed = [m for m in matches if m.status in ("completed", "finished")]
+        if completed:
+            completed.sort(key=lambda m: (m.start_date, m.start_time, m.match_id), reverse=True)
+            return completed[0]
         return matches[-1] if matches else None
     r = str(round_number)
     for m in matches:
