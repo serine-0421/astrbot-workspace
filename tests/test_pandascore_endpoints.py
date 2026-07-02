@@ -48,12 +48,16 @@ def test_fetch_matches_uses_status_specific_endpoint(monkeypatch) -> None:
         calls.append((endpoint, params))
         return pandascore.Success(value={"data": []})
 
+    async def fake_resolve_league_id(user_slug: str) -> int | None:
+        return 12345  # dummy league id
+
     monkeypatch.setattr(pandascore, "_ps_call", fake_ps_call)
+    monkeypatch.setattr(pandascore, "_resolve_league_id", fake_resolve_league_id)
 
     asyncio.run(pandascore.fetch_matches(league="lpl", status="upcoming"))
 
     assert calls[0][0] == "/lol/matches/upcoming"
-    assert calls[0][1]["filter[league.name]"] == "lpl"
+    assert calls[0][1]["filter[league_id]"] == 12345
 
 
 def test_fetch_series_and_tournaments_use_status_suffixes(monkeypatch) -> None:
@@ -63,15 +67,19 @@ def test_fetch_series_and_tournaments_use_status_suffixes(monkeypatch) -> None:
         calls.append((endpoint, params))
         return pandascore.Success(value={"data": []})
 
+    async def fake_resolve_league_id(user_slug: str) -> int | None:
+        return 67890  # dummy league id
+
     monkeypatch.setattr(pandascore, "_ps_call", fake_ps_call)
+    monkeypatch.setattr(pandascore, "_resolve_league_id", fake_resolve_league_id)
 
     asyncio.run(pandascore.fetch_series_list(league="lpl", status="running"))
     asyncio.run(pandascore.fetch_tournaments(league="lpl", status="past"))
 
     assert calls[0][0] == "/lol/series/running"
     assert calls[1][0] == "/lol/tournaments/past"
-    assert calls[0][1]["filter[league.name]"] == "lpl"
-    assert calls[1][1]["filter[league.name]"] == "lpl"
+    assert calls[0][1]["filter[league_id]"] == 67890
+    assert calls[1][1]["filter[league_id]"] == 67890
 
 
 def test_fetch_game_and_match_extensions_use_expected_routes(monkeypatch) -> None:

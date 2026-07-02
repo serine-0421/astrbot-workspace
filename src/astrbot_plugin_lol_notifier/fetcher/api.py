@@ -127,6 +127,96 @@ async def get_schedule(
     return wrapped
 
 
+# ── 端点直通封装（命令与 Pandascore 端点一一对应）──
+
+async def get_matches_upcoming(
+    league: str = "", page: int = 1, per_page: int = 50
+) -> ScheduleResult:
+    """GET /lol/matches/upcoming — 近期赛程（合并 running 实时比赛）。"""
+    from .pandascore import _filter_placeholder_matches
+    from .pandascore import fetch_running_matches as ps_running
+    from .pandascore import fetch_upcoming_matches as ps_upcoming
+
+    league_key = league.strip().lower() if league else ""
+    cache_key = _cache_key("upcoming", league_key, str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    upcoming = await ps_upcoming(league=league_key, page=page, per_page=per_page)
+    if not upcoming.ok:
+        logger.info(f"[api] Pandascore upcoming 错误，回退 citoapi ({league_key})")
+        from .lolesports import fetch_schedule as cito_schedule
+        fallback = await cito_schedule(league=league_key or "lpl")
+        _cache_set(cache_key, fallback, _SCHEDULE_CACHE_TTL)
+        return fallback
+
+    running = await ps_running(league=league_key)
+    all_matches = upcoming.value or []
+    if running.ok and running.value:
+        all_matches = running.value + all_matches
+    wrapped = Success(value=_filter_placeholder_matches(all_matches))
+    _cache_set(cache_key, wrapped, _SCHEDULE_CACHE_TTL)
+    return wrapped
+
+
+async def get_matches_running(league: str = "") -> LiveResult:
+    """GET /lol/matches/running — 正在进行的比赛（LiveMatch 格式）。"""
+    from .pandascore import fetch_live_matches as ps_live
+    return await ps_live(league=league.strip().lower() if league else "")
+
+
+async def get_matches_past(
+    league: str = "", page: int = 1, per_page: int = 50
+) -> ScheduleResult:
+    """GET /lol/matches/past — 已结束比赛列表。"""
+    from .pandascore import fetch_past_matches as ps_past
+
+    league_key = league.strip().lower() if league else ""
+    cache_key = _cache_key("past", league_key, str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = await ps_past(league=league_key, page=page, per_page=per_page)
+    _cache_set(cache_key, result, _SCHEDULE_CACHE_TTL)
+    return result
+
+
+async def get_matches_all(
+    league: str = "", page: int = 1, per_page: int = 50
+) -> ScheduleResult:
+    """GET /lol/matches — 所有比赛（含 upcoming/running/past）。"""
+    from .pandascore import _filter_placeholder_matches
+    from .pandascore import fetch_matches as ps_matches
+
+    league_key = league.strip().lower() if league else ""
+    cache_key = _cache_key("all", league_key, str(page))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = await ps_matches(league=league_key, page=page, per_page=per_page)
+    if result.ok and result.value:
+        result = Success(value=_filter_placeholder_matches(result.value))
+    _cache_set(cache_key, result, _SCHEDULE_CACHE_TTL)
+    return result
+
+
+async def get_match_by_id(match_id: str | int) -> ScheduleResult:
+    """GET /lol/matches/{id} — 按 ID 获取单场比赛详情。"""
+    from .pandascore import fetch_match_detail as ps_detail
+
+    cache_key = _cache_key("match_id", str(match_id))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = await ps_detail(str(match_id))
+    _cache_set(cache_key, result, _SCHEDULE_CACHE_TTL)
+    return result
+
+
 # ── 比赛结果 ──
 
 async def get_match_result(

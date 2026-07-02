@@ -53,22 +53,22 @@ _USER_AGENT = (
     "Chrome/125.0.0.0 Safari/537.36"
 )
 
-# ── League slug 映射（用户输入 → pandascore league name/slug） ──
-_LEAGUE_MAP: dict[str, str] = {
-    "lck": "lck",
-    "lpl": "lpl",
-    "lec": "lec",
-    "lcs": "lcs",
-    "lco": "lco",
-    "lcl": "lcl",
-    "ljl": "ljl",
-    "pcs": "pcs",
-    "vcs": "vcs",
-    "cblol": "cblol",
-    "lla": "lla",
-    "tcl": "tcl",
-    "msi": "msi",
-    "worlds": "worlds",
+# ── League 映射（用户输入 → Pandascore numeric league_id） ──
+_LEAGUE_MAP: dict[str, int] = {
+    "lck":    293,   # LCK
+    "lpl":    294,   # LPL
+    "lec":    4197,  # LEC
+    "lcs":    4198,  # LCS
+    "worlds": 297,   # Worlds
+    "msi":    300,   # Mid-Season Invitational
+    "lco":    4539,  # LCO
+    "vcs":    4141,  # VCS
+    "pcs":    4288,  # PCS
+    "lla":    4199,  # LLA
+    "cblol":  302,   # CBLOL
+    "tcl":    1003,  # TCL
+    "lcl":    4004,  # LCL
+    "ljl":    2092,  # LJL
 }
 
 
@@ -76,8 +76,55 @@ def supported_leagues() -> list[str]:
     return sorted(_LEAGUE_MAP.keys())
 
 
-def _ps_league(user_slug: str) -> str:
-    return _LEAGUE_MAP.get(user_slug.strip().lower(), "")
+# 懒加载扩展映射（Pandascore league name.lower() → id）
+_extended_league_map: dict[str, int] | None = None
+_extended_league_lock = asyncio.Lock()
+
+
+async def _ensure_extended_league_ids() -> dict[str, int]:
+    """懒加载 Pandascore 全量 league name→id 映射（分页获取所有）。"""
+    global _extended_league_map
+    if _extended_league_map is not None:
+        return _extended_league_map
+
+    async with _extended_league_lock:
+        if _extended_league_map is not None:
+            return _extended_league_map
+
+        mapping: dict[str, int] = {}
+        page = 1
+        while True:
+            result = await _ps_call("/lol/leagues", {"per_page": 100, "page": page})
+            if result.ok:
+                raw = result.value
+                data = raw.get("data", []) if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+                if not data:
+                    break
+                for league in data:
+                    if not isinstance(league, dict):
+                        continue
+                    name = (league.get("name") or "").strip().lower()
+                    lid = league.get("id")
+                    if name and isinstance(lid, int) and name not in mapping:
+                        mapping[name] = lid
+                if len(data) < 100:
+                    break
+                page += 1
+            else:
+                break
+        _extended_league_map = mapping
+        return mapping
+
+
+async def _resolve_league_id(user_slug: str) -> int | None:
+    """将用户输入的 league slug 解析为 Pandascore numeric league_id。"""
+    key = user_slug.strip().lower()
+    # 优先硬编码映射（已知的 14 个联赛）
+    if key in _LEAGUE_MAP:
+        return _LEAGUE_MAP[key]
+    # 回退懒加载映射（按 name 匹配）
+    extended = await _ensure_extended_league_ids()
+    return extended.get(key)
 
 
 # ── HTTP Client ──
@@ -402,9 +449,11 @@ async def fetch_matches(
     per_page: int = 50,
 ) -> ScheduleResult:
     """获取比赛列表，支持联赛和状态过滤。"""
-    league_slug = _ps_league(league) if league else ""
-    if league and not league_slug:
-        return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
+    league_id: int | None = None
+    if league:
+        league_id = await _resolve_league_id(league)
+        if league_id is None:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
 
     endpoint = "/lol/matches"
     if status in ("running", "upcoming", "past"):
@@ -415,9 +464,8 @@ async def fetch_matches(
         "per_page": per_page,
         "sort": "scheduled_at",
     }
-    if league_slug:
-        # Pandascore 使用 filter[league.name] 或 filter[league_id]
-        params["filter[league.name]"] = league_slug
+    if league_id is not None:
+        params["filter[league_id]"] = league_id
 
     result = await _ps_call(endpoint, params)
     if not result.ok:
@@ -445,13 +493,15 @@ async def fetch_past_matches(league: str = "", page: int = 1, per_page: int = 20
 
 async def fetch_live_matches(league: str = "") -> LiveResult:
     """获取正在进行的比赛（LiveMatch 格式）GET /lol/matches/running"""
-    league_slug = _ps_league(league) if league else ""
-    if league and not league_slug:
-        return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
+    league_id: int | None = None
+    if league:
+        league_id = await _resolve_league_id(league)
+        if league_id is None:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
 
     params: dict[str, Any] = {"page": 1, "per_page": 10}
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league_id is not None:
+        params["filter[league_id]"] = league_id
 
     result = await _ps_call("/lol/matches/running", params)
     if not result.ok:
@@ -496,9 +546,12 @@ async def fetch_league(league_id: str) -> JsonResult:
 async def fetch_series(league: str = "") -> JsonResult:
     """获取系列赛列表 GET /lol/series"""
     params: dict[str, Any] = {"per_page": 50}
-    league_slug = _ps_league(league) if league else ""
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league:
+        lid = await _resolve_league_id(league)
+        if lid is not None:
+            params["filter[league_id]"] = lid
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
     return await _ps_call("/lol/series", params)
 
 
@@ -511,9 +564,12 @@ async def fetch_tournaments(league: str = "", status: str = "") -> JsonResult:
         endpoint = f"/lol/tournaments/{status}"
 
     params: dict[str, Any] = {"per_page": 50}
-    league_slug = _ps_league(league) if league else ""
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league:
+        lid = await _resolve_league_id(league)
+        if lid is not None:
+            params["filter[league_id]"] = lid
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
     return await _ps_call(endpoint, params)
 
 
@@ -553,9 +609,12 @@ async def fetch_tournament_matches(
 async def fetch_teams(league: str = "", page: int = 1) -> JsonListResult:
     """获取战队列表 GET /lol/teams"""
     params: dict[str, Any] = {"page": page, "per_page": 100}
-    league_slug = _ps_league(league) if league else ""
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league:
+        lid = await _resolve_league_id(league)
+        if lid is not None:
+            params["filter[league_id]"] = lid
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
     result = await _ps_call("/lol/teams", params)
     if not result.ok:
         return Failure(error=result.error)
@@ -587,9 +646,12 @@ async def fetch_team_matches(team_id: str) -> ScheduleResult:
 async def fetch_players(league: str = "", page: int = 1) -> JsonListResult:
     """获取选手列表 GET /lol/players"""
     params: dict[str, Any] = {"page": page, "per_page": 100}
-    league_slug = _ps_league(league) if league else ""
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league:
+        lid = await _resolve_league_id(league)
+        if lid is not None:
+            params["filter[league_id]"] = lid
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
     result = await _ps_call("/lol/players", params)
     if not result.ok:
         return Failure(error=result.error)
@@ -703,14 +765,14 @@ async def fetch_standings(league: str = "lpl") -> StandingsResult:
     Pandascore 的 standings 在 tournament 级别。先查 running tournaments，
     再从其中取 standings。
     """
-    league_slug = _ps_league(league)
-    if not league_slug:
+    league_id = await _resolve_league_id(league)
+    if league_id is None:
         return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
 
     # 先查正在进行的锦标赛
     tn_result = await _ps_call("/lol/tournaments/running", {
         "per_page": 10,
-        "filter[league.name]": league_slug,
+        "filter[league_id]": league_id,
     })
     if not tn_result.ok:
         return Failure(error=tn_result.error)
@@ -720,7 +782,7 @@ async def fetch_standings(league: str = "lpl") -> StandingsResult:
         # 尝试 upcoming 锦标赛
         tn_result = await _ps_call("/lol/tournaments/upcoming", {
             "per_page": 10,
-            "filter[league.name]": league_slug,
+            "filter[league_id]": league_id,
         })
         if tn_result.ok:
             tournaments = tn_result.value.get("data", []) if isinstance(tn_result.value, dict) else []
@@ -742,9 +804,13 @@ async def fetch_today_matches(league: str = "") -> ScheduleResult:
         "sort": "scheduled_at",
         "range[scheduled_at]": f"{today_str}T00:00:00Z,{today_str}T23:59:59Z",
     }
-    league_slug = _ps_league(league) if league else ""
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    league_id: int | None = None
+    if league:
+        league_id = await _resolve_league_id(league)
+        if league_id is not None:
+            params["filter[league_id]"] = league_id
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
 
     result = await _ps_call("/lol/matches/upcoming", params)
     if not result.ok:
@@ -755,10 +821,10 @@ async def fetch_today_matches(league: str = "") -> ScheduleResult:
     running_result = await _ps_call("/lol/matches/running", {
         "page": 1,
         "per_page": 20,
-    } if not league_slug else {
+    } if league_id is None else {
         "page": 1,
         "per_page": 20,
-        "filter[league.name]": league_slug,
+        "filter[league_id]": league_id,
     })
     running_data: list[dict] = []
     if running_result.ok:
@@ -891,13 +957,16 @@ async def fetch_series_list(
     Args:
         status: '', 'past', 'running', 'upcoming'
     """
-    league_slug = _ps_league(league) if league else ""
     endpoint = "/lol/series"
     if status in ("past", "running", "upcoming"):
         endpoint = f"/lol/series/{status}"
     params: dict[str, Any] = {"page": page, "per_page": per_page, "sort": "begin_at"}
-    if league_slug:
-        params["filter[league.name]"] = league_slug
+    if league:
+        lid = await _resolve_league_id(league)
+        if lid is not None:
+            params["filter[league_id]"] = lid
+        else:
+            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
     return await _ps_call(endpoint, params)
 
 

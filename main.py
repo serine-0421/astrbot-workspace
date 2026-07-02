@@ -51,28 +51,30 @@ from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 HELP_TEXT = """🎮 LoL Notifier 指令列表
 📡 数据: PandaScore + citoapi
 
-━━━ 比赛查询 ━━━
-  /lol schedule [league] [regular|playoff] [season]
-      近期赛程（默认 LPL，最近 5 场）
-  /lol next [league] [regular|playoff] [season]
-      下一场完整时间表
-  /lol live [league]
-      正在进行的实时比赛
-  /lol result [league] [regular|playoff] [round]
-      比赛结果（默认最近一场）
-  /lol detail [league] [regular|playoff] [round]
-      比赛详细信息（含对局数据）
-  /lol standings [league] [regular|playoff] [season]
-      排名 / 积分榜
-  /lol today [league]
-      今日赛程
+━━━ 比赛查询（直接对应 Pandascore 端点）━━━
+  /lol matches [upcoming|running|past] [league] [page]
+      比赛列表 → GET /lol/matches[/{status}]
+      默认 upcoming，默认 5 场
+  /lol match <id>
+      单场比赛详情 → GET /lol/matches/{id}
+  /lol match games <id>
+      比赛所有对局  → GET /lol/matches/{id}/games
+  /lol match stats <id>
+      比赛选手统计  → GET /lol/matches/{id}/players/stats
 
-━━━ 对局 & 比赛扩展 ━━━
+━━━ 快捷别名 ━━━
+  /lol schedule [league]   = /lol matches upcoming [league]
+  /lol next [league]       = 只显示下一场
+  /lol live [league]       = /lol matches running [league]
+  /lol result [league]     = /lol matches past [league] (最近一场)
+  /lol detail [league]     = 单场详情（按 round 定位）
+  /lol today [league]      = 今日赛程
+  /lol standings [league]  = 排名 / 积分榜
+
+━━━ 对局扩展 ━━━
   /lol game info <game_id>             单局详情
-  /lol game events <game_id>           对局事伴
+  /lol game events <game_id>           对局事件
   /lol game frames <game_id>           对局帧数据
-  /lol match games <match_id>          比赛所有对局
-  /lol match stats <match_id>          比赛选手统计
 
 ━━━ 战队 & 选手 ━━━
   /lol team info [name]                战队信息
@@ -228,11 +230,51 @@ class LoLNotifierPlugin(Star):
             if sub_cmd == "help":
                 yield event.plain_result(HELP_TEXT)
 
+            # ── /lol matches — 直接对应 Pandascore 端点 ──
+            elif sub_cmd == "matches":
+                sub2 = args[0].lower() if len(args) > 0 else "upcoming"
+                if sub2 in ("upcoming", "running", "past"):
+                    league = args[1] if len(args) > 1 else ""
+                    page = int(args[2]) if len(args) > 2 and args[2].isdigit() else 1
+                    async for m in _result(self._handle_matches(event, sub2, league, page)):
+                        yield m
+                elif sub2 in _LEAGUE_SET:
+                    league = sub2
+                    page = int(args[1]) if len(args) > 1 and args[1].isdigit() else 1
+                    async for m in _result(self._handle_matches(event, "all", league, page)):
+                        yield m
+                else:
+                    yield event.plain_result("❌ 用法: /lol matches [upcoming|running|past] [league] [page]")
+
+            # ── /lol match <id> — 单场比赛 ──
+            elif sub_cmd == "match":
+                sub2 = args[0].lower() if len(args) > 0 else ""
+                # /lol match games <id>  |  /lol match stats <id>
+                if sub2 == "games":
+                    mid = args[1] if len(args) > 1 else ""
+                    if mid:
+                        async for m in _result(self._handle_match_games(event, mid)):
+                            yield m
+                    else:
+                        yield event.plain_result("❌ 用法: /lol match games <id>")
+                elif sub2 == "stats":
+                    mid = args[1] if len(args) > 1 else ""
+                    if mid:
+                        async for m in _result(self._handle_match_players_stats(event, mid)):
+                            yield m
+                    else:
+                        yield event.plain_result("❌ 用法: /lol match stats <id>")
+                elif sub2:
+                    # /lol match <id> → 单场比赛详情
+                    async for m in _result(self._handle_match_by_id(event, sub2)):
+                        yield m
+                else:
+                    yield event.plain_result("❌ 用法: /lol match <id> | /lol match games <id> | /lol match stats <id>")
+
+            # ── 快捷别名（向后兼容）──
             elif sub_cmd == "schedule":
-                league = args[0] if len(args) > 0 else "lpl"
-                stage = args[1] if len(args) > 1 else "regular"
-                season = args[2] if len(args) > 2 else "current"
-                async for m in _result(self._handle_schedule(event, league, stage, season)):
+                league = args[0] if len(args) > 0 else ""
+                async for m in _result(self._handle_matches(event, "upcoming", league, 1)):
                     yield m
 
             elif sub_cmd == "next":
@@ -430,18 +472,6 @@ class LoLNotifierPlugin(Star):
                 else:
                     yield event.plain_result("❌ 用法: /lol tournament <id>")
 
-            elif sub_cmd == "match":
-                sub2 = args[0].lower() if len(args) > 0 else ""
-                mid = args[1] if len(args) > 1 else ""
-                if sub2 == "games" and mid:
-                    async for m in _result(self._handle_match_games(event, mid)):
-                        yield m
-                elif sub2 == "stats" and mid:
-                    async for m in _result(self._handle_match_players_stats(event, mid)):
-                        yield m
-                else:
-                    yield event.plain_result("❌ 用法: /lol match games <id> | /lol match stats <id>")
-
             elif sub_cmd == "team":
                 sub2 = args[0].lower() if len(args) > 0 else "info"
                 if sub2 == "stats":
@@ -471,17 +501,71 @@ class LoLNotifierPlugin(Star):
     #  命令处理方法（无装饰器，由 _lol_dispatch 调用）
     # ═══════════════════════════════════════════════
 
-    async def _handle_schedule(self, event, league, stage, season):
-        result = await api.get_schedule(league, stage, season)
-        async for msg in self._render_query_result(
-            event, result,
-            has_payload=lambda v: bool(v),
-            render_text=lambda v: fmt.format_schedule(v),
-            render_image=lambda v: img.render_schedule(v),
-            empty_text="⏳ 暂未找到可显示的赛程信息，请稍后再试。",
-            error_prefix="/lol schedule error",
-        ):
-            yield msg
+    # ── /lol matches — 统一处理 upcoming / running / past / all ──
+
+    async def _handle_matches(self, event, status, league, page):
+        """统一处理 /lol matches [upcoming|running|past] [league]"""
+        if status == "upcoming":
+            result = await api.get_matches_upcoming(league, page=page)
+            async for msg in self._render_query_result(
+                event, result,
+                has_payload=lambda v: bool(v),
+                render_text=lambda v: fmt.format_schedule(v),
+                render_image=lambda v: img.render_schedule(v),
+                empty_text="📅 暂无即将进行的比赛。",
+                error_prefix="/lol matches upcoming error",
+            ):
+                yield msg
+        elif status == "running":
+            from .src.astrbot_plugin_lol_notifier.formatter.message import format_live_match
+            result = await api.get_matches_running(league)
+            match result:
+                case Success(value=detailed) if detailed:
+                    yield event.plain_result("\n\n".join(format_live_match(lm) for lm in detailed))
+                case Success():
+                    yield event.plain_result("📡 当前没有正在进行的比赛。")
+                case Failure(error=err):
+                    logger.error(f"[LoLNotifier] /lol matches running error: {err}")
+                    yield event.plain_result(f"❌ {err}")
+        elif status == "past":
+            result = await api.get_matches_past(league, page=page)
+            async for msg in self._render_query_result(
+                event, result,
+                has_payload=lambda v: bool(v),
+                render_text=lambda v: fmt.format_schedule(v),
+                render_image=lambda v: img.render_schedule(v),
+                empty_text="📅 暂无历史比赛记录。",
+                error_prefix="/lol matches past error",
+            ):
+                yield msg
+        else:  # all
+            result = await api.get_matches_all(league, page=page)
+            async for msg in self._render_query_result(
+                event, result,
+                has_payload=lambda v: bool(v),
+                render_text=lambda v: fmt.format_schedule(v),
+                render_image=lambda v: img.render_schedule(v),
+                empty_text="📅 暂无比赛记录。",
+                error_prefix="/lol matches error",
+            ):
+                yield msg
+
+    # ── /lol match <id> — 单场比赛详情 ──
+
+    async def _handle_match_by_id(self, event, match_id):
+        """GET /lol/matches/{id} — 按 ID 获取单场比赛。"""
+        result = await api.get_match_by_id(match_id)
+        match result:
+            case Success(value=matches) if matches:
+                m = matches[0]
+                text = fmt.format_schedule([m])
+                image_path = await img.render_schedule([m])
+                yield await self._render_or_text(event, text, image_path)
+            case Success():
+                yield event.plain_result(f"❌ 未找到比赛 ID: {match_id}")
+            case Failure(error=err):
+                logger.error(f"[LoLNotifier] /lol match {match_id} error: {err}")
+                yield event.plain_result(f"❌ {err}")
 
     async def _handle_next(self, event, league, stage, season):
         result = await api.get_schedule(league, stage, season)
