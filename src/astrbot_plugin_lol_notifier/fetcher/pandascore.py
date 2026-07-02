@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import time
 import traceback
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -42,6 +43,7 @@ from ..models import (
 # ── 常量 ──
 
 _BASE_URL = "https://api.pandascore.co"
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 _PANDASCORE_TOKEN = "mKtQmqlyBVChC0sQHPQxIaZubebQZvuSqSfxzW7_5MDbzCuyKw8"
 
@@ -189,6 +191,48 @@ async def _ps_call(endpoint: str, params: dict | None = None) -> JsonResult:
     return Success(value=data)
 
 
+def _parse_schedule_datetime(value: str | None) -> datetime | None:
+    """将 Pandascore 的时间字符串解析为北京时间。"""
+    if not value:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(_BEIJING_TZ)
+
+
+def _looks_placeholder_team(team: str | None) -> bool:
+    """判断团队名是否为占位符。"""
+    if not team:
+        return True
+    normalized = "".join(ch for ch in str(team).strip().lower() if ch.isalnum())
+    return normalized in {"tbd", "tba", "todo", "unknown", "pending", ""}
+
+
+def _filter_placeholder_matches(matches: list[LeagueMatch]) -> list[LeagueMatch]:
+    """过滤掉仍为 TBD/占位符的赛程条目，避免显示无效分组。"""
+    filtered: list[LeagueMatch] = []
+    for match in matches:
+        teams = [str(t).strip() for t in (match.teams or []) if str(t).strip()]
+        real_teams = [team for team in teams if not _looks_placeholder_team(team)]
+        if len(real_teams) >= 2:
+            filtered.append(match)
+    return filtered
+
+
 # ═══════════════════════════════════════════════════
 #  数据解析 — Pandascore JSON → 内部 Model
 # ═══════════════════════════════════════════════════
@@ -230,12 +274,13 @@ def _ps_parse_match(m: dict, league_hint: str = "") -> LeagueMatch:
     start_time = ""
     if scheduled_at:
         try:
-            from datetime import datetime, timezone, timedelta
-            dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-            beijing_tz = timezone(timedelta(hours=8))
-            dt_local = dt.astimezone(beijing_tz)
-            start_date = dt_local.strftime("%Y-%m-%d")
-            start_time = dt_local.strftime("%H:%M")
+            dt_local = _parse_schedule_datetime(scheduled_at)
+            if dt_local is not None:
+                start_date = dt_local.strftime("%Y-%m-%d")
+                start_time = dt_local.strftime("%H:%M")
+            else:
+                start_date = scheduled_at[:10] if len(scheduled_at) >= 10 else scheduled_at
+                start_time = scheduled_at[11:16] if len(scheduled_at) >= 16 else ""
         except Exception:
             start_date = scheduled_at[:10] if len(scheduled_at) >= 10 else scheduled_at
             start_time = scheduled_at[11:16] if len(scheduled_at) >= 16 else ""
@@ -605,12 +650,13 @@ def _ps_game_to_brief_match(game: dict) -> LeagueMatch | None:
         start_time = ""
         if scheduled_at:
             try:
-                from datetime import datetime, timezone, timedelta
-                dt = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-                beijing_tz = timezone(timedelta(hours=8))
-                dt_local = dt.astimezone(beijing_tz)
-                start_date = dt_local.strftime("%Y-%m-%d")
-                start_time = dt_local.strftime("%H:%M")
+                dt_local = _parse_schedule_datetime(scheduled_at)
+                if dt_local is not None:
+                    start_date = dt_local.strftime("%Y-%m-%d")
+                    start_time = dt_local.strftime("%H:%M")
+                else:
+                    start_date = scheduled_at[:10] if len(scheduled_at) >= 10 else scheduled_at
+                    start_time = scheduled_at[11:16] if len(scheduled_at) >= 16 else ""
             except Exception:
                 start_date = scheduled_at[:10] if len(scheduled_at) >= 10 else scheduled_at
                 start_time = scheduled_at[11:16] if len(scheduled_at) >= 16 else ""

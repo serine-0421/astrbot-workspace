@@ -570,24 +570,20 @@ class LoLNotifierPlugin(Star):
 
     async def _handle_result(self, event, league, stage, round_num):
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
-        detail_result = await api.get_match_detail(league, stage, round_arg)
-        if detail_result.ok and detail_result.value and detail_result.value.games:
-            async for msg in self._render_query_result(
-                event, detail_result,
-                has_payload=lambda v: bool(v.games),
-                render_text=lambda v: fmt.format_match_detail(v),
-                render_image=lambda v: img.render_match_detail(v),
-                empty_text="⏳ 比赛结果暂未公布，请比赛结束后再试。",
-                error_prefix="/lol result error",
-            ):
-                yield msg
-            return
         result = await api.get_match_result(league, stage, round_arg)
+        if result.ok and result.value is not None:
+            yield event.plain_result(fmt.format_match_basic(result.value))
+            detail_result = await api.get_match_detail(league, stage, round_arg)
+            if detail_result.ok and detail_result.value and detail_result.value.games:
+                yield event.plain_result("\nℹ️ 详细对局数据可使用 /lol detail 查看。")
+            return
+
+        detail_result = await api.get_match_detail(league, stage, round_arg)
         async for msg in self._render_query_result(
-            event, result,
-            has_payload=lambda v: v is not None,
-            render_text=lambda v: fmt.format_match_basic(v),
-            render_image=lambda v: img.render_match_result(v),
+            event, detail_result,
+            has_payload=lambda v: bool(v.games),
+            render_text=lambda v: fmt.format_match_detail(v),
+            render_image=lambda v: img.render_match_detail(v),
             empty_text="⏳ 比赛结果暂未公布，请比赛结束后再试。",
             error_prefix="/lol result error",
         ):

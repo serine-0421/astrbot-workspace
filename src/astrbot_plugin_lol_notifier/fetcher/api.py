@@ -104,6 +104,8 @@ async def get_schedule(
         if result.ok and result.value:
             stage_n = normalize_stage(stage) or "regular"
             filtered = [m for m in result.value if m.stage == stage_n or stage_n == "regular"]
+            from .pandascore import _filter_placeholder_matches
+            filtered = _filter_placeholder_matches(filtered)
             wrapped = Success(value=filtered)
         else:
             wrapped = result
@@ -117,6 +119,9 @@ async def get_schedule(
         all_matches = running.value + all_matches
     stage_n = normalize_stage(stage) or "regular"
     filtered = [m for m in all_matches if m.stage == stage_n or stage_n == "regular"]
+    filtered = [m for m in filtered if m.status in {"live", "completed", "upcoming"} or m.status == ""]
+    from .pandascore import _filter_placeholder_matches
+    filtered = _filter_placeholder_matches(filtered)
     wrapped = Success(value=filtered)
     _cache_set(cache_key, wrapped, _SCHEDULE_CACHE_TTL)
     return wrapped
@@ -333,6 +338,8 @@ async def get_today_schedule(league: str = "") -> ScheduleResult:
     if result.ok and result.value:
         today = _date_today()
         filtered = [m for m in result.value if m.start_date == today]
+        from .pandascore import _filter_placeholder_matches
+        filtered = _filter_placeholder_matches(filtered)
         wrapped = Success(value=filtered)
     else:
         wrapped = result
