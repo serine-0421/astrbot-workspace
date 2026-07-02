@@ -8,5 +8,5 @@
         └── models.py  → 数据模型
 
 入口: main.py（AstrBot 加载点）
-测试: TEST.md（含全端点连通性脚本）
+测试: tests/（pytest 回归测试）
 """

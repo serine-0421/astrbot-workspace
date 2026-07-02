@@ -776,7 +776,7 @@ async def fetch_today_matches(league: str = "") -> ScheduleResult:
 async def fetch_champions(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
     """GET /lol/champions"""
     params: dict[str, Any] = {"page": page, "per_page": per_page}
-    if version and version != "all":
+    if version:
         params["filter[videogame_version]"] = version
     return await _ps_call("/lol/champions", params)
 
@@ -793,7 +793,7 @@ async def fetch_champion(champion_id: int | str) -> JsonResult:
 async def fetch_items(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
     """GET /lol/items"""
     params: dict[str, Any] = {"page": page, "per_page": per_page}
-    if version and version != "all":
+    if version:
         params["filter[videogame_version]"] = version
     return await _ps_call("/lol/items", params)
 
