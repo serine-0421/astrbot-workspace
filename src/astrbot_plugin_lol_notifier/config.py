@@ -39,10 +39,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "follow_teams": [],
     "enable_image_render": False,
     "enable_match_notifications": True,
-    # ── citoapi（赛程/排名/比赛详情/实时数据） ──
-    # API Key 优先级: 环境变量 CITO_API_KEY > 此处的 cito_api_key > 内置 Key
-    # citoapi Key 长期有效，无需刷新
-    "cito_api_key": "",
     # ── B站: 多账号推送开关（由 _gen_bilibili_defaults 生成） ──
     **_gen_bilibili_defaults(),
     "bilibili_check_interval": 60,

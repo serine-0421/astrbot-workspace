@@ -1,4 +1,4 @@
-"""Data models for the LoL esports plugin — covers all citoapi endpoints."""
+"""Data models for the LoL esports plugin."""
 
 from __future__ import annotations
 

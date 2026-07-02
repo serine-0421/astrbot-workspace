@@ -2,12 +2,11 @@
 
 架构:
 - pandascore.py:  Pandascore HTTP 客户端（主数据源，Bearer token）
-- lolesports.py:  citoapi HTTP 客户端（备用数据源，x-api-key）
-- api.py:         数据访问封装层（Pandascore 优先 + citoapi 回退 + TTL 缓存 + Result 封装）
+- api.py:         数据访问封装层（Pandascore + TTL 缓存 + Result 封装）
 - bilibili.py / bilibili_dynamic.py / weibo.py: 第三方平台数据抓取
 """
 
-from . import api, bilibili, bilibili_dynamic, lolesports, pandascore, weibo
+from . import api, bilibili, bilibili_dynamic, pandascore, weibo
 from .api import (
     close_session,
     get_all_leagues,
@@ -55,11 +54,6 @@ from .bilibili import (
     fetch_bilibili_updates,
 )
 from .bilibili_dynamic import fetch_blg_bp_dynamics
-from .lolesports import (
-    close_session as lolesports_close_session,
-    get_api_key as lolesports_get_api_key,
-    set_api_key as lolesports_set_api_key,
-)
 from .weibo import fetch_weibo_announcements, fetch_weibo_by_keyword, fetch_weibo_posters
 
 __all__ = [
@@ -103,10 +97,6 @@ __all__ = [
     "get_series_teams",
     "get_tournaments",
     "get_tournament",
-    # === lolesports.py（citoapi 底层）===
-    "lolesports_close_session",
-    "lolesports_get_api_key",
-    "lolesports_set_api_key",
     # === bilibili ===
     "fetch_bilibili_updates",
     "fetch_bilibili_dynamics",

@@ -1,7 +1,7 @@
 """AstrBot plugin: LoL Notifier
 
 Provides LoL esports push notifications and on-demand query commands.
-Data: PandaScore (primary) + citoapi (fallback).
+Data: PandaScore.
 
 Commands (prefix /lol):
     /lol help
@@ -41,7 +41,6 @@ from astrbot.api.star import Context, Star, register
 from .src.astrbot_plugin_lol_notifier.fetcher import api
 from .src.astrbot_plugin_lol_notifier.fetcher import bilibili as bili_fetcher
 from .src.astrbot_plugin_lol_notifier.fetcher import weibo as weibo_fetcher
-from .src.astrbot_plugin_lol_notifier.fetcher.lolesports import get_api_key, set_api_key
 from .src.astrbot_plugin_lol_notifier.config import get_weibo_uids, BILIBILI_ACCOUNTS
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
@@ -49,7 +48,7 @@ from .src.astrbot_plugin_lol_notifier.models import Failure, Success
 from .src.astrbot_plugin_lol_notifier.scheduler import LoLScheduler
 
 HELP_TEXT = """🎮 LoL Notifier 指令列表
-📡 数据: PandaScore + citoapi
+📡 数据: PandaScore
 
 ━━━ 比赛查询（直接对应 Pandascore 端点）━━━
   /lol matches [upcoming|running|past] [league] [page]
@@ -111,7 +110,7 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   series status: past running upcoming
 
 ━━━ 管理 ━━━
-  /lol subscribe / unsubscribe / apikey / test"""
+  /lol subscribe / unsubscribe / test"""
 
 _LEAGUE_SET = frozenset({
     "lck", "lpl", "lec", "lcs", "lco", "lcl", "ljl", "pcs", "vcs",
@@ -193,10 +192,6 @@ class LoLNotifierPlugin(Star):
 
     async def initialize(self) -> None:
         """Initialize plugin and start scheduler."""
-        key = get_api_key()
-        masked = key[:8] + "****" + key[-4:] if len(key) > 12 else "****"
-        logger.info(f"[LoLNotifier] citoapi Key: {masked}")
-
         self.scheduler.start()
         logger.info("[LoLNotifier] Plugin initialized.")
 
@@ -782,25 +777,7 @@ class LoLNotifierPlugin(Star):
             yield event.plain_result("ℹ️ 当前会话尚未订阅。发送 /lol subscribe 可以订阅。")
 
     async def _handle_apikey(self, event, key):
-        arg = key.strip()
-        if arg:
-            set_api_key(arg)
-            new_key = get_api_key()
-            masked = new_key[:8] + "****" + new_key[-4:] if len(new_key) > 12 else "****"
-            yield event.plain_result(f"✅ citoapi Key 已更新: {masked}")
-            return
-        current = get_api_key()
-        masked = current[:8] + "****" + current[-4:] if len(current) > 12 else "****"
-        import os
-        source = (
-            "环境变量 CITO_API_KEY" if os.environ.get("CITO_API_KEY", "").strip()
-            else "手动设置" if current != "cito_dc5cfcfa4b9aca180e71c0e1282be83ef2bfc7658b9658ee5c88813fb6163091"
-            else "内置 Key"
-        )
-        yield event.plain_result(
-            f"🔑 citoapi Key 状态\n\n  Key: {masked}\n  来源: {source}\n  citoapi Key 长期有效，无需刷新\n\n"
-            f"💡 设置新 Key: /lol apikey <你的key>\n💡 环境变量: CITO_API_KEY"
-        )
+        yield event.plain_result("ℹ️ citoapi 已移除。如需配置 Pandascore API Key，请使用环境变量 PANDASCORE_API_KEY。")
 
     async def _handle_test(self, event, season):
         year = season if season else "current"

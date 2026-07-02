@@ -3,7 +3,7 @@
 项目结构:
     src/
     └── astrbot_plugin_lol_notifier/   ← 插件包
-        ├── fetcher/   → 数据抓取（citoapi / B站 / 微博）
+        ├── fetcher/   → 数据抓取（PandaScore / B站 / 微博）
         ├── formatter/ → 消息格式化（文本 / HTML 图片）
         └── models.py  → 数据模型
 

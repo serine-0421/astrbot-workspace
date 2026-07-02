@@ -5,12 +5,6 @@
     "hint": "开启后，所有查询命令与推送通知将以图片形式输出，而非纯文本。需要 Pillow 渲染环境支持。",
     "default": false
   },
-  "cito_api_key": {
-    "description": "citoapi Key",
-    "type": "string",
-    "hint": "citoapi 的 API Key，用于获取 LoL 赛程/排名/BP/实时数据。Key 长期有效，无需刷新。获取地址: https://api.citoapi.com/ 或联系管理员。也可通过环境变量 CITO_API_KEY 设置。",
-    "default": ""
-  },
   "bilibili_push_lol_video": {
     "description": "[哔哩哔哩英雄联盟赛事] 视频推送",
     "type": "bool",

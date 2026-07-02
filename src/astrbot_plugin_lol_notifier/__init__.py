@@ -4,7 +4,7 @@
 便于本地脚本测试。
 
 核心模块:
-    fetcher/   — 数据抓取（103 citoapi fetch + 41 wrappers + B站/微博）
+    fetcher/   — 数据抓取（PandaScore + B站/微博）
     formatter/ — 消息格式化（36 text formatters + 5 HTML renderers）
     models.py  — 数据模型（dataclass + Result 模式）
     config.py  — 插件配置管理

@@ -3,7 +3,7 @@
 LoL 电竞赛事推送与查询插件，覆盖主流赛区的赛程、实时比分、积分榜、战队与选手信息，并支持对局、系列赛、锦标赛、英雄/装备/符文/技能等查询。插件还集成了 B 站与微博内容抓取，支持按内容类型独立开关。
 
 > 💡 **开箱即用** — 插件内置 API Key，安装后即可使用。
-> 📡 数据来源：[PandaScore](https://pandascore.co)（主） + [citoapi](https://api.citoapi.com/api/v1/lol)（备用）
+> 📡 数据来源：[PandaScore](https://pandascore.co)
 
 ---
 
@@ -161,9 +161,6 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 |:--|:--|
 | `/lol subscribe` | 订阅自动推送（赛程 / B站 / 微博海报） |
 | `/lol unsubscribe` | 取消当前会话的自动推送 |
-| `/lol apikey` | 查看当前 API Key 状态 |
-| `/lol apikey <新Key>` | 手动设置自定义 API Key（可选） |
-| `/lol test [season]` | 运行连通性测试 |
 | `/lol help` | 显示完整帮助 |
 
 ---
@@ -200,11 +197,7 @@ git clone https://github.com/MareDevi/astrbot_plugin_lol_notifier.git
 
 ### API Key
 
-插件内置 PandaScore 和 citoapi 的 API Key，开箱即用：
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|:--|:--|:--|:--|
-| `cito_api_key` | `string` | `""` | 自定义 citoapi Key。留空则使用内置 Key。也可设环境变量 `CITO_API_KEY` |
+插件内置 PandaScore 的 API Key，开箱即用：
 
 > PandaScore 的 API Key 已内置在代码中，无需额外配置。
 
@@ -266,9 +259,8 @@ astrbot_plugin_lol_notifier/
         ├── utils.py            # 工具函数
         ├── fetcher/            # 数据抓取层
         │   ├── __init__.py          # 导出 30+ 个 api 函数 + B站/微博抓取器
-        │   ├── api.py               # 数据访问封装（PandaScore 优先 + citoapi 回退 + TTL 缓存）
+        │   ├── api.py               # 数据访问封装（PandaScore + TTL 缓存）
         │   ├── pandascore.py        # PandaScore HTTP 客户端（主数据源，Bearer Token）
-        │   ├── lolesports.py        # citoapi HTTP 客户端（备用数据源，x-api-key）
         │   ├── bilibili.py          # B站 API
         │   ├── bilibili_dynamic.py  # B站动态 API
         │   └── weibo.py             # 微博 API
@@ -279,16 +271,14 @@ astrbot_plugin_lol_notifier/
 
 ### 数据流与架构
 
-用户命令 `/lol ...` 会先由 `main.py` 解析并分发到数据访问层 `fetcher/api.py`；访问层会先走 PandaScore，必要时回退到 citoapi，并结合 TTL 缓存与统一结果封装。随后由 `formatter/message.py` 生成文本消息，必要时再由 `image_renderer.py` 输出图片。后台推送则由 `scheduler.py` 负责。
+用户命令 `/lol ...` 会先由 `main.py` 解析并分发到数据访问层 `fetcher/api.py`；访问层通过 PandaScore 获取数据，结合 TTL 缓存与统一结果封装。随后由 `formatter/message.py` 生成文本消息，必要时再由 `image_renderer.py` 输出图片。后台推送则由 `scheduler.py` 负责。
 
 ```mermaid
 flowchart LR
     CMD["/lol 命令"] --> MAIN["main.py<br/>命令解析"]
     MAIN --> API["fetcher/api.py<br/>统一访问层"]
-    API --> PS["PandaScore<br/>主数据源"]
-    API --> CITO["citoapi<br/>备用回退"]
+    API --> PS["PandaScore<br/>数据源"]
     PS --> FORMAT["formatter/message.py"]
-    CITO --> FORMAT
     FORMAT --> IMG["image_renderer.py<br/>可选图片渲染"]
     IMG --> OUT["AstrBot 消息通道"]
 ```
@@ -307,11 +297,11 @@ pytest -q
 
 ## ⚠️ 当前状态与限制
 
-插件以 PandaScore 为主数据源，citoapi 仅作为赛程、比分和积分榜等核心功能的备用回退。当前命令集整体可用，以下是简要状态说明：
+插件以 PandaScore 作为数据源。当前命令集整体可用，以下是简要状态说明：
 
 | 类别 | 状态 | 说明 |
 |:--|:--|:--|
-| 赛程 / 实时 / 结果 / 积分榜 | ✅ 正常 | 主要由 PandaScore 提供，必要时回退到 citoapi |
+| 赛程 / 实时 / 结果 / 积分榜 | ✅ 正常 | 由 PandaScore 提供 |
 | 对局事件 / 帧 / 选手统计 | ✅ 正常 | 依赖 PandaScore 的比赛与统计接口 |
 | 战队 / 选手 / 系列赛 / 锦标赛 | ✅ 正常 | 支持按赛区和状态筛选 |
 | 英雄 / 装备 / 符文 / 技能 | ✅ 正常 | 参考数据，仅依赖 PandaScore |

@@ -45,12 +45,6 @@ if TYPE_CHECKING:
 
 # 主轮询间隔: 5 分钟（用于 B站/微博等第三方平台检查）
 POLL_INTERVAL = 300
-# 是否允许后台轮询消耗 citoapi 配额（配额紧张时设为 False）
-SCHEDULER_API_ENABLED = False
-# 赛程数据轮询间隔: 30 分钟（citoapi 每月限 500 次）— 仅在 SCHEDULER_API_ENABLED=True 时生效
-SCHEDULE_POLL_INTERVAL = 1800
-# 实时比赛轮询间隔: 3 分钟 — 仅在 SCHEDULER_API_ENABLED=True 时生效
-LIVE_POLL_INTERVAL = 180
 # 并行广播并发数
 BROADCAST_CONCURRENCY = 5
 
@@ -166,53 +160,16 @@ class LoLScheduler:
                 await asyncio.sleep(POLL_INTERVAL)
 
     async def _check_and_notify(self) -> None:
-        """主推送检查逻辑：按时机触发各类通知。
-
-        不同数据源使用不同的轮询间隔以保护 citoapi 配额（每月 500 次）：
-        - B站/微博：每轮都检查（不消耗 citoapi 配额）
-        - citoapi 赛事数据：仅在 SCHEDULER_API_ENABLED=True 时轮询
-        """
+        """主推送检查逻辑：按时机触发各类通知。"""
         now = datetime.now(timezone.utc)
-        now_ts = time.monotonic()
 
-        # ═══ 第三方平台推送（不消耗 citoapi 配额，每轮都执行） ═══
+        # ═══ 第三方平台推送 ═══
 
         # 1. B站多账号 → 视频+图文动态 (per-account per-type toggle)
         await self._check_bilibili_feeds()
 
         # 2. 微博 英雄联盟赛事 (UID 6537214902) → 赛前海报 (LPL+预告)
         await self._check_weibo_posters()
-
-        # ═══ citoapi 赛事推送（配额紧张时跳过） ═══
-        if not SCHEDULER_API_ENABLED:
-            return
-
-        # ═══ 实时比赛轮询（消耗 citoapi，按间隔控制） ═══
-        if now_ts - self._last_live_poll >= LIVE_POLL_INTERVAL:
-            self._last_live_poll = now_ts
-            await self._check_live_matches()
-
-        # ═══ 赛事数据推送（消耗 citoapi，按间隔控制） ═══
-        if now_ts - self._last_schedule_poll < SCHEDULE_POLL_INTERVAL:
-            return
-        self._last_schedule_poll = now_ts
-
-        schedule_result = await fetcher_api.get_schedule("lck", "regular", "current")
-        if isinstance(schedule_result, Failure):
-            return
-
-        matches = schedule_result.value if schedule_result.value else []
-        if not matches:
-            return
-
-        for match in matches:
-            await self._check_24h_before_match(match, now)
-            await self._check_30min_before_match(match, now)
-            await self._check_bp_finished(match, now)
-            await self._check_round_finished(match, now)
-            await self._check_match_finished(match, now)
-
-        await self._check_elimination_updates()
 
     async def _broadcast(self, text: str, image_path: str | None = None) -> None:
         """广播消息到所有订阅者"""

@@ -762,30 +762,27 @@ async def fetch_schedule(league: str = "lpl") -> ScheduleResult:
 async def fetch_standings(league: str = "lpl") -> StandingsResult:
     """通过联赛名获取积分榜。
 
-    Pandascore 的 standings 在 tournament 级别。先查 running tournaments，
-    再从其中取 standings。
+    Pandascore 的 standings 在 tournament 级别。先查 running tournaments
+    （不带 league filter，tournaments 端点不支持 filter[league_id]），
+    再客户端侧筛选 league_id。
     """
     league_id = await _resolve_league_id(league)
     if league_id is None:
         return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
 
-    # 先查正在进行的锦标赛
-    tn_result = await _ps_call("/lol/tournaments/running", {
-        "per_page": 10,
-        "filter[league_id]": league_id,
-    })
-    if not tn_result.ok:
-        return Failure(error=tn_result.error)
+    # 拉全量 running tournaments（含 league 信息），客户端筛选
+    tn_result = await _ps_call("/lol/tournaments/running", {"per_page": 50})
+    tournaments: list[dict] = []
+    if tn_result.ok:
+        all_tn = tn_result.value.get("data", []) if isinstance(tn_result.value, dict) else []
+        tournaments = [t for t in all_tn if isinstance(t, dict) and t.get("league_id") == league_id]
 
-    tournaments = tn_result.value.get("data", []) if isinstance(tn_result.value, dict) else []
     if not tournaments:
         # 尝试 upcoming 锦标赛
-        tn_result = await _ps_call("/lol/tournaments/upcoming", {
-            "per_page": 10,
-            "filter[league_id]": league_id,
-        })
+        tn_result = await _ps_call("/lol/tournaments/upcoming", {"per_page": 50})
         if tn_result.ok:
-            tournaments = tn_result.value.get("data", []) if isinstance(tn_result.value, dict) else []
+            all_tn = tn_result.value.get("data", []) if isinstance(tn_result.value, dict) else []
+            tournaments = [t for t in all_tn if isinstance(t, dict) and t.get("league_id") == league_id]
 
     if not tournaments:
         return Success(value=[])
