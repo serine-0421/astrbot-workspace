@@ -7,6 +7,7 @@ from .message import (
     format_bilibili_bp_update,
     format_bilibili_update,
     format_champions,
+    format_daily_schedule,
     format_game_events,
     format_game_frames,
     format_game_info,
@@ -80,5 +81,7 @@ __all__ = [
     # B站 & 微博
     "format_bilibili_update",
     "format_bilibili_bp_update",
+    "format_daily_schedule",
+    "format_pre_match_alert",
     "format_weibo_poster",
 ]

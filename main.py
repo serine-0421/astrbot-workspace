@@ -569,13 +569,15 @@ class LoLNotifierPlugin(Star):
 
     async def _handle_today(self, event, league):
         result = await api.get_today_schedule(league)
-        match result:
-            case Success(value=data) if data:
-                yield event.plain_result(fmt.format_schedule(data))
-            case Success():
-                yield event.plain_result("📅 今天暂无比赛。")
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
+        async for msg in self._render_query_result(
+            event, result,
+            has_payload=lambda v: bool(v),
+            render_text=lambda v: fmt.format_daily_schedule(v),
+            render_image=lambda v: img.render_daily_schedule(v),
+            empty_text="📅 今天暂无比赛。",
+            error_prefix="/lol today error",
+        ):
+            yield msg
 
     async def _handle_team_info(self, event, team_id):
         result = await api.get_all_teams()
