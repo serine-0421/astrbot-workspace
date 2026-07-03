@@ -55,6 +55,7 @@ class LeagueMatch:
     status: str = ""
     arena: str = ""
     teams: list[str] = field(default_factory=list)
+    team_images: list[str] = field(default_factory=list)  # 队标图片 URL
     games: list[MatchGame] = field(default_factory=list)
     summary: str = ""
 

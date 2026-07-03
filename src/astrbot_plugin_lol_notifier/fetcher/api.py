@@ -347,6 +347,25 @@ async def get_today_schedule(league: str = "") -> ScheduleResult:
     return result
 
 
+async def get_daily_schedule_multi_league(league_slugs: list[str]) -> ScheduleResult:
+    """获取多个联赛的今日赛程（北京时间），用于每日推送。
+
+    league_slugs: 如 ["lpl","lck","msi","worlds"]
+    """
+    if not league_slugs:
+        return Success(value=[])
+
+    cache_key = _cache_key("daily_multi", ",".join(sorted(league_slugs)))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    from .pandascore import fetch_daily_matches_multi_league as ps_daily_multi
+    result = await ps_daily_multi(league_slugs)
+    _cache_set(cache_key, result, _SHORT_SCHEDULE_CACHE_TTL)
+    return result
+
+
 def _date_today() -> str:
     from datetime import date
     return date.today().isoformat()

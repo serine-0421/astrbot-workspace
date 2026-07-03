@@ -106,5 +106,29 @@
     "type": "int",
     "hint": "内存中最多缓存的车手头像数量。默认 30 张。",
     "default": 30
+  },
+  "enable_daily_schedule": {
+    "description": "每日赛程推送",
+    "type": "bool",
+    "hint": "开启后，每天北京时间 8:00 推送当日 LPL/LCK/MSI/Worlds 赛程。若当天无比赛则提示今日无赛程。",
+    "default": true
+  },
+  "enable_pre_match_reminder": {
+    "description": "赛前 10 分钟提醒",
+    "type": "bool",
+    "hint": "开启后，在每场比赛开始前 10 分钟推送预告消息。范围仅限 schedule_leagues 配置的联赛。",
+    "default": true
+  },
+  "schedule_push_time": {
+    "description": "每日赛程推送时间（北京时间）",
+    "type": "string",
+    "hint": "格式为 HH:MM（北京时间），默认 08:00。",
+    "default": "08:00"
+  },
+  "schedule_leagues": {
+    "description": "赛程推送包含的联赛列表",
+    "type": "list",
+    "hint": "每日赛程和赛前预告仅包含此列表中的联赛。可选值: lpl, lck, msi, worlds 等。",
+    "default": ["lpl", "lck", "msi", "worlds"]
   }
 }

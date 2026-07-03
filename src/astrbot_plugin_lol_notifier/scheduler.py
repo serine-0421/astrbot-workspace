@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -30,6 +30,10 @@ from .config import (
     is_bilibili_push_enabled,
     is_any_bilibili_push_enabled,
     is_weibo_poster_push_enabled,
+    is_daily_schedule_enabled,
+    is_pre_match_reminder_enabled,
+    get_schedule_push_time,
+    get_schedule_leagues,
 )
 from .fetcher import api as fetcher_api
 from .fetcher import bilibili, weibo
@@ -139,6 +143,8 @@ class LoLScheduler:
             "bp_round_notice": self._state.bp_round_notice,
             "post_round_notice": self._state.post_round_notice,
             "elimination_updates": self._state.elimination_updates,
+            "daily_schedule_sent_date": self._state.daily_schedule_sent_date,
+            "pre_match_10min_notified": list(self._state.pre_match_10min_notified),
             "bilibili_video_seen": {k: list(v) for k, v in self._state.bilibili_video_seen.items()},
             "bilibili_dynamic_seen": {k: list(v) for k, v in self._state.bilibili_dynamic_seen.items()},
             "bilibili_live_state": self._state.bilibili_live_state,
@@ -162,6 +168,14 @@ class LoLScheduler:
     async def _check_and_notify(self) -> None:
         """主推送检查逻辑：按时机触发各类通知。"""
         now = datetime.now(timezone.utc)
+
+        # ═══ 每日赛程推送（北京时间 8:00） ═══
+        if is_daily_schedule_enabled(self._config):
+            await self._check_daily_schedule(now)
+
+        # ═══ 赛前 10 分钟预告 ═══
+        if is_pre_match_reminder_enabled(self._config):
+            await self._check_pre_match_10min(now)
 
         # ═══ 第三方平台推送 ═══
 
@@ -403,7 +417,7 @@ class LoLScheduler:
 
             if new_items:
                 self._state.bilibili_video_seen[uid] = seen
-                text = formatter.format_bilibili_update(new_items)
+                text = formatter.format_bilibili_update(new_items, name)
                 await self._broadcast(text, None)
                 await self._persist_state()
                 logger.info(f"[LoLNotifier] B站-{name}: sent {len(new_items)} video(s)")
@@ -549,6 +563,95 @@ class LoLScheduler:
             logger.error(f"[LoLNotifier] Error checking live matches: {e}")
 
     # ── 赛事节点 ──
+
+    async def _check_daily_schedule(self, now_utc: datetime) -> None:
+        """每天北京时间指定时间推送当日赛程（仅 LPL/LCK/MSI/Worlds）。"""
+        beijing_tz = timezone(timedelta(hours=8))
+        beijing_now = now_utc.astimezone(beijing_tz)
+        today_str = beijing_now.strftime("%Y-%m-%d")
+
+        # 检查今天是否已推送
+        if self._state.daily_schedule_sent_date == today_str:
+            return
+
+        # 检查是否到了推送时间
+        push_time_str = get_schedule_push_time(self._config)  # e.g. "08:00"
+        try:
+            push_hour, push_minute = map(int, push_time_str.split(":"))
+        except ValueError:
+            push_hour, push_minute = 8, 0
+
+        # 只在推送时间 ± 2.5 分钟窗口内触发（5分钟轮询间隔的一半）
+        current_minutes = beijing_now.hour * 60 + beijing_now.minute
+        push_minutes = push_hour * 60 + push_minute
+        if abs(current_minutes - push_minutes) > 2:
+            return
+
+        # 获取目标联赛列表
+        leagues = get_schedule_leagues(self._config)  # ["lpl","lck","msi","worlds"]
+
+        try:
+            result = await api.get_daily_schedule_multi_league(leagues)
+            if not result.ok:
+                logger.warning(f"[LoLNotifier] Daily schedule fetch failed: {result.error}")
+                return
+
+            matches = result.value or []
+            if not matches:
+                text = "📅 今日无赛程，好好休息一下吧~"
+                await self._broadcast(text, None)
+                logger.info("[LoLNotifier] Daily schedule: no matches today")
+            else:
+                text = formatter.format_daily_schedule(matches)
+                image_path = await img.render_daily_schedule(matches) if self._image_mode else None
+                await self._broadcast(text, image_path)
+                logger.info(f"[LoLNotifier] Daily schedule: sent {len(matches)} matches for {today_str}")
+
+            self._state.daily_schedule_sent_date = today_str
+            await self._persist_state()
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error in daily schedule check: {e}", exc_info=True)
+
+    async def _check_pre_match_10min(self, now_utc: datetime) -> None:
+        """赛前 10 分钟推送预告。"""
+        leagues = get_schedule_leagues(self._config)
+
+        try:
+            result = await api.get_daily_schedule_multi_league(leagues)
+            if not result.ok or not result.value:
+                return
+
+            beijing_tz = timezone(timedelta(hours=8))
+
+            for match in result.value:
+                if not match.match_id or match.match_id in self._state.pre_match_10min_notified:
+                    continue
+
+                # 解析比赛时间
+                try:
+                    match_dt_str = f"{match.start_date}T{match.start_time}"
+                    match_dt = datetime.strptime(match_dt_str, "%Y-%m-%dT%H:%M")
+                    match_dt = match_dt.replace(tzinfo=beijing_tz)
+                except (ValueError, TypeError):
+                    continue
+
+                # 距现在还有多少秒
+                time_until = (match_dt - now_utc).total_seconds()
+
+                # 在比赛开始前 8~12 分钟窗口内触发（兼容 5 分钟轮询间隔）
+                if 480 <= time_until <= 720:
+                    text = formatter.format_pre_match_alert(match)
+                    image_path = await img.render_pre_match_alert(match) if self._image_mode else None
+                    await self._broadcast(text, image_path)
+
+                    self._state.pre_match_10min_notified.add(match.match_id)
+                    await self._persist_state()
+                    logger.info(
+                        f"[LoLNotifier] Pre-match alert: {match.teams} "
+                        f"({match.match_name}) in {int(time_until // 60)}min"
+                    )
+        except Exception as e:
+            logger.error(f"[LoLNotifier] Error in pre-match check: {e}", exc_info=True)
 
     async def _check_elimination_updates(self) -> None:
         """败者组/淘汰赛关键节点：晋级/淘汰情况 + 后续对阵"""

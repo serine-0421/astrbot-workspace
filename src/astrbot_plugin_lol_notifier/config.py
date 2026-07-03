@@ -39,6 +39,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "follow_teams": [],
     "enable_image_render": False,
     "enable_match_notifications": True,
+    # ── 赛程推送 ──
+    "enable_daily_schedule": True,
+    "enable_pre_match_reminder": True,
+    "schedule_push_time": "08:00",  # 北京时间每日赛程推送时间
+    "schedule_leagues": ["lpl", "lck", "msi", "worlds"],  # 赛程推送包含的联赛
     # ── B站: 多账号推送开关（由 _gen_bilibili_defaults 生成） ──
     **_gen_bilibili_defaults(),
     "bilibili_check_interval": 60,
@@ -94,6 +99,26 @@ def get_weibo_uids(config: Any) -> list[str]:
 
 def is_weibo_poster_push_enabled(config: Any) -> bool:
     return bool(config.get("enable_weibo_poster_push", True)) if config else True
+
+
+# ── 赛程推送 ──
+
+def is_daily_schedule_enabled(config: Any) -> bool:
+    return bool(config.get("enable_daily_schedule", True)) if config else True
+
+
+def is_pre_match_reminder_enabled(config: Any) -> bool:
+    return bool(config.get("enable_pre_match_reminder", True)) if config else True
+
+
+def get_schedule_push_time(config: Any) -> str:
+    return str(config.get("schedule_push_time", "08:00")) if config else "08:00"
+
+
+def get_schedule_leagues(config: Any) -> list[str]:
+    default = DEFAULT_CONFIG["schedule_leagues"]
+    leagues = config.get("schedule_leagues", default) if config else default
+    return list(leagues) if leagues else default
 
 
 

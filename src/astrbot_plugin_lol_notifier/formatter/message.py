@@ -178,28 +178,25 @@ def format_post_match_summary(match: LeagueMatch, report: str | None = None, ima
     return replace_side_mentions("\n".join(lines), team_a=match.teams[0] if match.teams else "我方", team_b=match.teams[1] if len(match.teams) > 1 else "对方")
 
 
-def format_bilibili_update(items: list[dict[str, Any]]) -> str:
+def format_bilibili_update(items: list[dict[str, Any]], account_name: str = "") -> str:
     """格式化 B 站视频更新推送消息
 
     items: [{"type":"video","bvid":"BV...","title":"...","pubdate":1234567890,"url":"...","cover":"..."}]
+    account_name: B站 UP 主名称，如 "哔哩哔哩英雄联盟赛事"
     """
     if not items:
         return "📺 暂无 B 站账号更新。"
 
-    lines = [f"📺 B 站账号更新了 {len(items)} 个视频：\n"]
+    name = account_name or "未知UP主"
+    lines = [f"📣 UP 主「{name}」投稿了新视频：\n"]
     for i, item in enumerate(items, 1):
         title = item.get("title", "无标题")
         url = item.get("url", "")
-        bvid = item.get("bvid", "")
-        desc = item.get("description", "")
-        summary = f"{desc[:60]}..." if len(desc) > 60 else desc
 
-        lines.append(f"{i}. {title}")
-        lines.append(f"   BV: {bvid}")
-        if summary:
-            lines.append(f"   {summary}")
-        lines.append(f"   {url}")
-        lines.append("")
+        lines.append(f"标题: {title}")
+        lines.append(f"链接: {url}")
+        if len(items) > 1:
+            lines.append("")
 
     return "\n".join(lines)
 
@@ -300,6 +297,87 @@ def format_live_match(live: LiveMatch) -> str:
         lines.append("⏳ 等待比赛开始...")
 
     return "\n".join(lines).rstrip()
+
+
+# ═══════════════════════════════════════════════════
+#  每日赛程 & 赛前预告
+# ═══════════════════════════════════════════════════
+
+def _league_display_name(league_name: str) -> str:
+    """将 Pandascore 原始联赛名映射为用户友好的中文/缩写名。"""
+    mapping = {
+        "lpl": "LPL",
+        "lck": "LCK",
+        "lec": "LEC",
+        "lcs": "LCS",
+        "worlds": "Worlds",
+        "world championship": "Worlds",
+        "mid-season invitational": "MSI",
+        "msi": "MSI",
+        "lco": "LCO",
+        "vcs": "VCS",
+        "pcs": "PCS",
+        "lla": "LLA",
+        "cblol": "CBLOL",
+        "tcl": "TCL",
+        "lcl": "LCL",
+        "ljl": "LJL",
+    }
+    key = league_name.strip().lower()
+    return mapping.get(key, league_name.upper())
+
+
+def format_daily_schedule(matches: list[LeagueMatch]) -> str:
+    """格式化每日赛程推送。
+
+    Args:
+        matches: 当天开始的比赛列表
+    """
+    if not matches:
+        return "📅 今日无赛程，好好休息一下吧~"
+
+    # 按联赛分组
+    by_league: dict[str, list[LeagueMatch]] = {}
+    for m in matches:
+        league_key = _league_display_name(m.league)
+        by_league.setdefault(league_key, []).append(m)
+
+    lines = ["📅 今日赛程安排\n"]
+
+    for league_name, league_matches in by_league.items():
+        lines.append(f"━━━ {league_name} ━━━")
+        for match in league_matches:
+            teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
+            bo_info = f" ({match.bo_type})" if match.bo_type else ""
+            status_icon = {"live": "🔴", "in_progress": "🔴", "completed": "✅"}.get(match.status, "⏳")
+            lines.append(
+                f"{status_icon} {teams}{bo_info}\n"
+                f"   ⏰ {match.start_time}"
+            )
+        lines.append("")
+
+    lines.append("祝大家观赛愉快！🎉")
+    return "\n".join(lines)
+
+
+def format_pre_match_alert(match: LeagueMatch) -> str:
+    """格式化赛前 10 分钟预告。
+
+    Args:
+        match: 即将开始的比赛
+    """
+    teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
+    league_short = _league_display_name(match.league)
+    bo_info = f" ({match.bo_type})" if match.bo_type else ""
+
+    lines = [
+        f"⚡ 比赛即将开始！",
+        f"",
+        f"🏆 {league_short} · {match.stage}",
+        f"⚔️ {teams}{bo_info}",
+        f"⏰ {match.start_time} 开赛",
+    ]
+    return "\n".join(lines)
 
 
 # ═══════════════════════════════════════════════════

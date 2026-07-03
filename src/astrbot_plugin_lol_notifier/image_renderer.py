@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .formatter.message import format_match_bp, format_match_detail, format_match_result, format_schedule, format_standings
+from .formatter.message import format_match_bp, format_match_detail, format_match_result, format_schedule, format_standings, format_daily_schedule, format_pre_match_alert
 from .models import LeagueMatch, MatchDetail, StandingEntry
 
 
@@ -75,3 +75,13 @@ async def render_match_detail(detail: MatchDetail) -> str:
 
 async def render_standings(standings: list[StandingEntry]) -> str:
     return _render_card("LOL STANDINGS", format_standings(standings))
+
+
+async def render_daily_schedule(matches: list[LeagueMatch]) -> str:
+    """渲染每日赛程卡片（带队标尝试）。"""
+    return _render_card("LOL TODAY", format_daily_schedule(matches))
+
+
+async def render_pre_match_alert(match: LeagueMatch) -> str:
+    """渲染赛前预告卡片。"""
+    return _render_card("LOL PRE-MATCH", format_pre_match_alert(match))

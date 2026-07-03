@@ -14,6 +14,10 @@ class NotificationState:
     post_round_notice: dict[str, list[int]] = field(default_factory=dict)
     elimination_updates: dict[str, str] = field(default_factory=dict)  # 淘汰赛/实时比赛状态指纹
 
+    # ── 每日赛程 & 赛前预告 ──
+    daily_schedule_sent_date: str = ""  # 已推送每日赛程的北京日期 YYYY-MM-DD
+    pre_match_10min_notified: set[str] = field(default_factory=set)  # 已推送 10min 预告的 match_id
+
     # ── 第三方平台动态去重 ──
     # 多账号 B站推送去重: uid → {id, ...}
     bilibili_video_seen: dict[str, set[str]] = field(default_factory=dict)     # uid → {bvid, ...}
@@ -33,6 +37,8 @@ class NotificationState:
                 setattr(self, attr, self._ensure_sets(val))
         if isinstance(self.weibo_updates, list):
             self.weibo_updates = set(self.weibo_updates)
+        if isinstance(self.pre_match_10min_notified, list):
+            self.pre_match_10min_notified = set(self.pre_match_10min_notified)
 
 
 def default_state() -> NotificationState:

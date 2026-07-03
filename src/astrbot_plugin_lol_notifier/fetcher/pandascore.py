@@ -288,10 +288,13 @@ def _ps_parse_match(m: dict, league_hint: str = "") -> LeagueMatch:
     """将 Pandascore match 对象转为 LeagueMatch。"""
     opponents = m.get("opponents") or []
     teams: list[str] = []
+    team_images: list[str] = []
     for opp in opponents:
         team = opp.get("opponent", {})
         name = team.get("name") or team.get("acronym") or "TBD"
         teams.append(name)
+        img_url = team.get("image_url", "") or ""
+        team_images.append(img_url)
 
     # 比分
     results = m.get("results") or []
@@ -374,6 +377,7 @@ def _ps_parse_match(m: dict, league_hint: str = "") -> LeagueMatch:
         status=status,
         arena="",
         teams=teams,
+        team_images=team_images,
         games=games,
         summary=summary,
     )
@@ -829,6 +833,77 @@ async def fetch_today_matches(league: str = "") -> ScheduleResult:
 
     all_data = running_data + data
     matches = _ps_parse_matches(all_data, league)
+    return Success(value=matches)
+
+
+async def fetch_daily_matches_multi_league(
+    league_ids: list[str],
+    beijing_date: str = "",
+) -> ScheduleResult:
+    """获取指定多个联赛的今日赛程（北京时间日期范围）。
+
+    league_ids: 联赛 slug 列表，如 ["lpl","lck","msi","worlds"]
+    beijing_date: 北京日期 YYYY-MM-DD，为空则用今天的北京时间
+    """
+    if not league_ids:
+        return Success(value=[])
+
+    # 计算北京时间日期范围对应的 UTC 范围
+    if not beijing_date:
+        beijing_date = (datetime.now(_BEIJING_TZ)).strftime("%Y-%m-%d")
+
+    # 北京时间 00:00 → UTC 前一日 16:00
+    # 北京时间 23:59:59 → UTC 当日 15:59:59
+    beijing_start = datetime.strptime(beijing_date, "%Y-%m-%d").replace(tzinfo=_BEIJING_TZ)
+    beijing_end = beijing_start.replace(hour=23, minute=59, second=59)
+    utc_start = beijing_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    utc_end = beijing_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # 并行拉取各联赛 upcoming + running
+    all_data: list[dict] = []
+    seen_ids: set[str] = set()
+
+    async def _fetch_league(lg: str) -> None:
+        lid = await _resolve_league_id(lg)
+        if lid is None:
+            logger.warning(f"[PandaScore] Unknown league slug: {lg}")
+            return
+
+        # upcoming
+        params: dict[str, Any] = {
+            "page": 1,
+            "per_page": 30,
+            "sort": "scheduled_at",
+            "range[scheduled_at]": f"{utc_start},{utc_end}",
+            "filter[league_id]": lid,
+        }
+        result = await _ps_call("/lol/matches/upcoming", params)
+        if result.ok:
+            data = result.value.get("data", []) if isinstance(result.value, dict) else []
+            for m in data:
+                mid = str(m.get("id", ""))
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_data.append(m)
+
+        # running
+        run_result = await _ps_call("/lol/matches/running", {
+            "page": 1, "per_page": 10, "filter[league_id]": lid,
+        })
+        if run_result.ok:
+            rdata = run_result.value.get("data", []) if isinstance(run_result.value, dict) else []
+            for m in rdata:
+                mid = str(m.get("id", ""))
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_data.append(m)
+
+    # 并行拉取所有联赛
+    await asyncio.gather(*[_fetch_league(lg) for lg in league_ids])
+
+    matches = _ps_parse_matches(all_data, "")
+    # 按开赛时间排序
+    matches.sort(key=lambda m: (m.start_date, m.start_time))
     return Success(value=matches)
 
 
