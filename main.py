@@ -33,8 +33,9 @@ import asyncio
 from datetime import datetime, timezone
 
 from astrbot.api import AstrBotConfig, logger
-from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event import AstrMessageEvent, filter, MessageChain
 from astrbot.api.star import Context, Star, register
+import astrbot.api.message_components as Comp
 
 from .src.astrbot_plugin_lol_notifier.fetcher import api
 from .src.astrbot_plugin_lol_notifier.fetcher import bilibili as bili_fetcher
@@ -146,6 +147,19 @@ class LoLNotifierPlugin(Star):
                 logger.warning(f"[LoLNotifier] Image render failed, fallback to text: {exc}")
         return event.plain_result(text)
 
+    async def _render_text_and_image(self, event: AstrMessageEvent, text: str, image_path: str):
+        """同时发送文字和图片（一条消息）。图片模式下发送 chain_result，否则回退纯文本。"""
+        if self._image_mode and image_path:
+            try:
+                chain = [
+                    Comp.Plain(text),
+                    Comp.Image.fromFileSystem(image_path),
+                ]
+                return event.chain_result(chain)
+            except Exception as exc:
+                logger.warning(f"[LoLNotifier] Text+image render failed, fallback to text: {exc}")
+        return event.plain_result(text)
+
     async def _render_query_result(
         self,
         event: AstrMessageEvent,
@@ -156,12 +170,16 @@ class LoLNotifierPlugin(Star):
         render_image,
         empty_text: str,
         error_prefix: str,
+        force_text: bool = False,
     ):
         match result:
             case Success(value=value) if has_payload(value):
                 text = render_text(value)
-                image_path = await render_image(value)
-                yield await self._render_or_text(event, text, image_path)
+                if force_text:
+                    yield event.plain_result(text)
+                else:
+                    image_path = await render_image(value)
+                    yield await self._render_or_text(event, text, image_path)
             case Success():
                 yield event.plain_result(empty_text)
             case Failure(error=err):
@@ -426,6 +444,7 @@ class LoLNotifierPlugin(Star):
                 render_image=lambda v: img.render_schedule(v),
                 empty_text="📅 暂无即将进行的比赛。",
                 error_prefix="/lol matches upcoming error",
+                force_text=True,
             ):
                 yield msg
         elif status == "running":
@@ -569,15 +588,16 @@ class LoLNotifierPlugin(Star):
 
     async def _handle_today(self, event, league):
         result = await api.get_today_schedule(league)
-        async for msg in self._render_query_result(
-            event, result,
-            has_payload=lambda v: bool(v),
-            render_text=lambda v: fmt.format_daily_schedule(v),
-            render_image=lambda v: img.render_daily_schedule(v),
-            empty_text="📅 今天暂无比赛。",
-            error_prefix="/lol today error",
-        ):
-            yield msg
+        match result:
+            case Success(value=matches) if matches:
+                text = fmt.format_daily_schedule(matches)
+                image_path = await img.render_daily_schedule(matches)
+                yield await self._render_text_and_image(event, text, image_path)
+            case Success():
+                yield event.plain_result("📅 今天暂无比赛。")
+            case Failure(error=err):
+                logger.error(f"[LoLNotifier] /lol today error: {err}")
+                yield event.plain_result(f"❌ {err}")
 
     async def _handle_team_info(self, event, team_id):
         result = await api.get_all_teams()

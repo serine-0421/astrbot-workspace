@@ -186,14 +186,20 @@ class LoLScheduler:
         await self._check_weibo_posters()
 
     async def _broadcast(self, text: str, image_path: str | None = None) -> None:
-        """广播消息到所有订阅者"""
+        """广播消息到所有订阅者。
+        
+        当同时有 text 和 image_path 时，以 Plain+Image 组合链发送。
+        """
         if not self._subscribers:
             return
         
         chain = None
         if self._image_mode and image_path:
             try:
-                chain = MessageChain([Image.fromFileSystem(image_path)])
+                if text.strip():
+                    chain = MessageChain([Plain(text), Image.fromFileSystem(image_path)])
+                else:
+                    chain = MessageChain([Image.fromFileSystem(image_path)])
             except Exception as e:
                 logger.warning(f"[LoLNotifier] Image broadcast failed, fallback to text: {e}")
         
