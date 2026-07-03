@@ -312,11 +312,22 @@ def _ps_parse_match(m: dict, league_hint: str = "") -> LeagueMatch:
 
     # 系列赛
     serie_obj = m.get("serie") or {}
-    stage = serie_obj.get("name", "") or "Regular Season"
+    stage = serie_obj.get("full_name", "") or serie_obj.get("name", "") or "Regular Season"
+    season = serie_obj.get("season", "") or ""
+    if season:
+        stage = f"{season} {stage}" if season not in stage else stage
+
+    # 锦标赛
+    tournament_obj = m.get("tournament") or {}
+    tournament_name = tournament_obj.get("name", "") or ""
 
     # 比赛局数
     number_of_games = m.get("number_of_games", 0)
     bo_type = f"BO{number_of_games}" if number_of_games else ""
+
+    # 弃权/平局
+    is_forfeit = bool(m.get("forfeit", False))
+    is_draw = bool(m.get("draw", False))
 
     # 时间
     scheduled_at = m.get("scheduled_at", "")
@@ -361,9 +372,11 @@ def _ps_parse_match(m: dict, league_hint: str = "") -> LeagueMatch:
 
     # 总结
     score_str = ":".join(scores) if scores else ""
-    summary = f"{' vs '.join(teams)} {score_str}" if teams else ""
-    if status == "live":
-        summary = f"🔴 {' vs '.join(teams)} {score_str}"
+    summary = score_str
+    if is_forfeit:
+        summary = f"弃权 ({score_str})" if score_str else "弃权"
+    elif is_draw:
+        summary = f"平局 ({score_str})" if score_str else "平局"
 
     return LeagueMatch(
         league=league_name,
@@ -797,43 +810,22 @@ async def fetch_standings(league: str = "lpl") -> StandingsResult:
 
 
 async def fetch_today_matches(league: str = "") -> ScheduleResult:
-    """获取今日赛程。"""
-    today_str = time.strftime("%Y-%m-%d")
-    params: dict[str, Any] = {
-        "page": 1,
-        "per_page": 50,
-        "sort": "scheduled_at",
-        "range[scheduled_at]": f"{today_str}T00:00:00Z,{today_str}T23:59:59Z",
-    }
-    league_id: int | None = None
-    if league:
-        league_id = await _resolve_league_id(league)
-        if league_id is not None:
-            params["filter[league_id]"] = league_id
-        else:
-            return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
+    """获取今日赛程（北京时间范围）。
 
-    result = await _ps_call("/lol/matches/upcoming", params)
-    if not result.ok:
-        return Failure(error=result.error)
+    无 league 参数时默认 LPL/LCK/MSI/Worlds（四大联赛）。
+    包含已结束的比赛以显示比分。
+    """
+    MAJOR_LEAGUES = ["lpl", "lck", "msi", "worlds"]
 
-    data = result.value.get("data", []) if isinstance(result.value, dict) else []
-    # 同时获取 running matches
-    running_result = await _ps_call("/lol/matches/running", {
-        "page": 1,
-        "per_page": 20,
-    } if league_id is None else {
-        "page": 1,
-        "per_page": 20,
-        "filter[league_id]": league_id,
-    })
-    running_data: list[dict] = []
-    if running_result.ok:
-        running_data = running_result.value.get("data", []) if isinstance(running_result.value, dict) else []
+    if not league:
+        return await fetch_daily_matches_multi_league(MAJOR_LEAGUES)
 
-    all_data = running_data + data
-    matches = _ps_parse_matches(all_data, league)
-    return Success(value=matches)
+    # 单赛区：验证并委托
+    league_id = await _resolve_league_id(league)
+    if league_id is None:
+        return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
+
+    return await fetch_daily_matches_multi_league([league])
 
 
 async def fetch_daily_matches_multi_league(
@@ -859,7 +851,7 @@ async def fetch_daily_matches_multi_league(
     utc_start = beijing_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     utc_end = beijing_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # 并行拉取各联赛 upcoming + running
+    # 并行拉取各联赛 upcoming + running + past
     all_data: list[dict] = []
     seen_ids: set[str] = set()
 
@@ -869,18 +861,29 @@ async def fetch_daily_matches_multi_league(
             logger.warning(f"[PandaScore] Unknown league slug: {lg}")
             return
 
-        # upcoming
-        params: dict[str, Any] = {
+        base_params: dict[str, Any] = {
             "page": 1,
             "per_page": 30,
             "sort": "scheduled_at",
             "range[scheduled_at]": f"{utc_start},{utc_end}",
             "filter[league_id]": lid,
         }
-        result = await _ps_call("/lol/matches/upcoming", params)
+
+        # upcoming
+        result = await _ps_call("/lol/matches/upcoming", dict(base_params))
         if result.ok:
             data = result.value.get("data", []) if isinstance(result.value, dict) else []
             for m in data:
+                mid = str(m.get("id", ""))
+                if mid and mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_data.append(m)
+
+        # past（已完成比赛，用于显示比分）
+        past_result = await _ps_call("/lol/matches/past", dict(base_params))
+        if past_result.ok:
+            pdata = past_result.value.get("data", []) if isinstance(past_result.value, dict) else []
+            for m in pdata:
                 mid = str(m.get("id", ""))
                 if mid and mid not in seen_ids:
                     seen_ids.add(mid)

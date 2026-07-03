@@ -3,7 +3,7 @@
     "description": "图片渲染模式",
     "type": "bool",
     "hint": "开启后，所有查询命令与推送通知将以图片形式输出，而非纯文本。需要 Pillow 渲染环境支持。",
-    "default": false
+    "default": true
   },
   "bilibili_push_lol_video": {
     "description": "[哔哩哔哩英雄联盟赛事] 视频推送",

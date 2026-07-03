@@ -8,6 +8,24 @@ from ..models import LeagueMatch, LiveGameFrame, LiveMatch, MatchDetail, MatchGa
 from ..utils import replace_side_mentions
 
 
+def _format_round(round_text: str) -> str:
+    """格式化轮次信息。
+
+    - 纯数字/短文本（如 "1", "Quarter 3"）→ 第X场
+    - 含冒号或 "vs" 的描述性名称 → 直接使用
+    """
+    if not round_text:
+        return ""
+    # 纯 ASCII 数字 → "第X场"
+    if round_text.strip().isdigit():
+        return f"第{round_text.strip()}场 "
+    # 含 "vs" 或过长 → 直接使用
+    if "vs" in round_text.lower() or ":" in round_text or len(round_text) > 20:
+        return f"{round_text} "
+    # 短名称 → 第X场
+    return f"第{round_text}场 "
+
+
 def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     if not matches:
         return "📅 暂无比赛安排。"
@@ -27,25 +45,30 @@ def format_schedule(matches: list[LeagueMatch], limit: int = 5) -> str:
     lines = ["📅 LoL 近期赛程（最近优先）\n"]
     for match in sorted_matches[:limit]:
         teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
-        round_info = f"第{match.round}场 " if match.round else ""
+        round_info = _format_round(match.round) if match.round else ""
+        bo_info = f" ({match.bo_type})" if match.bo_type else ""
         status_icon = {"completed": "✅", "finished": "✅", "live": "🔴", "in_progress": "🔴"}.get(
             match.status, "⏳"
         )
         lines.append(
-            f"{status_icon} [{match.league.upper()} · {match.stage}] {round_info}{teams}\n"
-            f"  时间: {match.start_date} {match.start_time}\n"
-            f"  场馆: {match.arena or '未知'}"
+            f"{status_icon} [{match.league.upper()} · {match.stage}] {round_info}{teams}{bo_info}\n"
+            f"  时间: {match.start_date} {match.start_time}"
         )
+        if match.arena:
+            lines.append(f"  场馆: {match.arena}")
         # 已结束的比赛附加结果
-        if match.status in ("completed", "finished") and match.games:
-            winners = [g.winner for g in match.games if g.winner]
-            if winners:
-                score_parts = []
-                for t in match.teams:
-                    wins = winners.count(t)
-                    score_parts.append(f"{t}({wins})")
-                lines.append(f"  结果: {' vs '.join(score_parts)}")
-        if match.status in ("live", "in_progress") and match.summary:
+        if match.status in ("completed", "finished"):
+            if match.games:
+                winners = [g.winner for g in match.games if g.winner]
+                if winners:
+                    score_parts = []
+                    for t in match.teams:
+                        wins = winners.count(t)
+                        score_parts.append(f"{t}({wins})")
+                    lines.append(f"  结果: {' vs '.join(score_parts)}")
+            elif match.summary:
+                lines.append(f"  结果: {match.summary}")
+        elif match.status in ("live", "in_progress") and match.summary:
             lines.append(f"  比分: {match.summary}")
     return "\n".join(lines)
 
@@ -328,10 +351,10 @@ def _league_display_name(league_name: str) -> str:
 
 
 def format_daily_schedule(matches: list[LeagueMatch]) -> str:
-    """格式化每日赛程推送。
+    """格式化今日赛程（详细格式，含比分/结果）。
 
     Args:
-        matches: 当天开始的比赛列表
+        matches: 当天的比赛列表（已按时间排序）
     """
     if not matches:
         return "📅 今日无赛程，好好休息一下吧~"
@@ -342,18 +365,42 @@ def format_daily_schedule(matches: list[LeagueMatch]) -> str:
         league_key = _league_display_name(m.league)
         by_league.setdefault(league_key, []).append(m)
 
-    lines = ["📅 今日赛程安排\n"]
+    lines = ["📅 今日赛程\n"]
 
     for league_name, league_matches in by_league.items():
         lines.append(f"━━━ {league_name} ━━━")
         for match in league_matches:
             teams = " vs ".join(match.teams) if match.teams else match.match_name or "未知对局"
+            round_info = _format_round(match.round) if match.round else ""
             bo_info = f" ({match.bo_type})" if match.bo_type else ""
-            status_icon = {"live": "🔴", "in_progress": "🔴", "completed": "✅"}.get(match.status, "⏳")
+            status_icon = {
+                "completed": "✅", "finished": "✅",
+                "live": "🔴", "in_progress": "🔴",
+            }.get(match.status, "⏳")
+
             lines.append(
-                f"{status_icon} {teams}{bo_info}\n"
-                f"   ⏰ {match.start_time}"
+                f"{status_icon} [{match.league.upper()} · {match.stage}] "
+                f"{round_info}{teams}{bo_info}\n"
+                f"  时间: {match.start_date} {match.start_time}"
             )
+            if match.arena:
+                lines.append(f"  场馆: {match.arena}")
+
+            # 已结束的比赛附加结果
+            if match.status in ("completed", "finished"):
+                if match.games:
+                    winners = [g.winner for g in match.games if g.winner]
+                    if winners:
+                        score_parts = []
+                        for t in match.teams:
+                            wins = winners.count(t)
+                            score_parts.append(f"{t}({wins})")
+                        lines.append(f"  结果: {' vs '.join(score_parts)}")
+                elif match.summary:
+                    lines.append(f"  结果: {match.summary}")
+            elif match.status in ("live", "in_progress") and match.summary:
+                lines.append(f"  比分: {match.summary}")
+
         lines.append("")
 
     lines.append("祝大家观赛愉快！🎉")

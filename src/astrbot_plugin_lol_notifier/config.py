@@ -37,7 +37,7 @@ def _gen_bilibili_defaults() -> dict[str, Any]:
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "follow_teams": [],
-    "enable_image_render": False,
+    "enable_image_render": True,
     "enable_match_notifications": True,
     # ── 赛程推送 ──
     "enable_daily_schedule": True,
