@@ -25,8 +25,47 @@ _USER_AGENT = (
 _TAG_RE = re.compile(r"<[^>]+>")
 
 # 微博 Cookie（硬编码，也可通过环境变量 WEIBO_COOKIE 覆盖）
-_DEFAULT_COOKIE: str = ""
+_DEFAULT_COOKIE: str = (
+    "SCF=An5YsYLqRu2u-fMQVGzzeVbXKqhJ2bMpLzY9S1xsOkSXYkLQapAdAr_lh_yhef5QuhIdy1jg7z3urXrzjEBzJaA.; "
+    "SINAGLOBAL=4360766153826.32.1781671800393; "
+    "ULV=1781671800395:1:1:1:4360766153826.32.1781671800393:; "
+    "PC_TOKEN=d004faf008; "
+    "ALF=1785664495; "
+    "SUB=_2A25HQ_a_DeRhGeFG41EQ9y3JzT6IHXVkIXZ3rDV8PUJbkNAbLW2tkW1NeKOkVyk-mqXRLKOKAo87jvY-AoqbVO3Q; "
+    "SUBP=0033WrSXqPxfM725Ws9jqgMF55529P9D9W5RpnkEqeHiHppAJIvC7Rv-5JpX5KMhUgL.FoMR1hepS0efSoz2dJLoI7y8THSLMJLV9Btt; "
+    "XSRF-TOKEN=PDlIuvM6VvTOYPBGV7iTyXZH; "
+    "WBPSESS=49UgBhdQBFvCtcmuaB4XIXbtzcb4li8EDkPQdndhuSb_hiUoH4y7K4mNQUMO5UosJfZGoAya0nT3y5KAl-j5NEvJ_EQvadYgRW-ILfml_U_nDHZ5t4SFm4M1ChOdqQYa3lrqZkw7lq75CSydHSuFyA=="
+)
 _WEIBO_COOKIE: str = _DEFAULT_COOKIE or os.environ.get("WEIBO_COOKIE", "")
+
+
+def set_weibo_cookie(cookie: str) -> None:
+    """设置微博 Cookie（一般无需手动调用，模块初始化时已自动加载）。"""
+    global _WEIBO_COOKIE
+    _WEIBO_COOKIE = (cookie or _DEFAULT_COOKIE or os.environ.get("WEIBO_COOKIE", "")).strip()
+    if _WEIBO_COOKIE:
+        logger.info("[Weibo] Cookie configured (length=%d)", len(_WEIBO_COOKIE))
+
+
+def _get_cookie_header() -> str:
+    """获取当前 Cookie 字符串。"""
+    if _WEIBO_COOKIE:
+        return _WEIBO_COOKIE
+    return os.environ.get("WEIBO_COOKIE", "")
+
+
+def _build_headers(referer: str = "https://m.weibo.cn") -> dict[str, str]:
+    """构建带 Cookie 和 Referer 的请求头。"""
+    headers = {
+        "User-Agent": _USER_AGENT,
+        "Referer": referer,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+    cookie = _get_cookie_header()
+    if cookie:
+        headers["Cookie"] = cookie
+    return headers
 
 
 def _strip_html(text: str) -> str:
@@ -54,11 +93,7 @@ async def _fetch_user_posts(uid: str) -> list[dict[str, Any]]:
     container_id = f"107603{uid}"
     url = "https://m.weibo.cn/api/container/getIndex"
     params = {"type": "uid", "value": uid, "containerid": container_id}
-    headers = {
-        "User-Agent": _USER_AGENT,
-        "Accept": "application/json, text/plain, */*",
-        "Referer": f"https://m.weibo.cn/u/{uid}",
-    }
+    headers = _build_headers(f"https://m.weibo.cn/u/{uid}")
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

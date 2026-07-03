@@ -729,7 +729,7 @@ class LoLNotifierPlugin(Star):
 
     async def _handle_weibo(self, event):
         try:
-            uid_list = get_weibo_uids(self._config)
+            uid_list = get_weibo_uids(self.config)
             items = await weibo_fetcher.fetch_weibo_posters(uid_list)
         except Exception as e:
             yield event.plain_result(f"❌ 微博查询失败: {e}")
