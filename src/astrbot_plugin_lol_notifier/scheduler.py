@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -49,8 +50,12 @@ if TYPE_CHECKING:
 
 # 主轮询间隔: 5 分钟（用于 B站/微博等第三方平台检查）
 POLL_INTERVAL = 300
+# 轮询间隔随机抖动范围（±秒），避免固定周期被识别为定时任务
+POLL_JITTER = 30
 # 并行广播并发数
 BROADCAST_CONCURRENCY = 5
+# B站多账号间请求间隔（秒），避免同时请求触发风控
+BILIBILI_ACCOUNT_DELAY = 3.0
 
 
 class LoLScheduler:
@@ -158,7 +163,9 @@ class LoLScheduler:
             try:
                 if self._subscribers:
                     await self._check_and_notify()
-                await asyncio.sleep(POLL_INTERVAL)
+                # 添加随机抖动，避免固定间隔被识别为定时爬虫
+                jitter = random.uniform(-POLL_JITTER, POLL_JITTER)
+                await asyncio.sleep(POLL_INTERVAL + jitter)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -367,15 +374,23 @@ class LoLScheduler:
             logger.info(f"[LoLNotifier] Sent match final result for {match_key}")
 
     async def _check_bilibili_feeds(self) -> None:
-        """B站多账号统一推送：遍历所有账号，按 per-type toggle 拉取视频/图文动态。"""
+        """B站多账号统一推送：遍历所有账号，按 per-type toggle 拉取视频/图文动态。
+
+        账号间添加延迟以避免同时请求触发 B站风控。
+        """
         if not is_any_bilibili_push_enabled(self._config):
             return
 
         try:
-            for account in BILIBILI_ACCOUNTS:
+            accounts = list(BILIBILI_ACCOUNTS)
+            for i, account in enumerate(accounts):
                 uid = account["uid"]
                 key = account["key"]
                 name = account["name"]
+
+                # 账号间延迟（首个账号不等待）
+                if i > 0:
+                    await asyncio.sleep(BILIBILI_ACCOUNT_DELAY)
 
                 # ── 视频 ──
                 if is_bilibili_push_enabled(self._config, key, "video"):

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import random
 import time as time_mod
 from typing import Any
 from urllib.parse import urlencode
@@ -40,6 +41,15 @@ _MIXIN_ENC = [
 # WBI keys 缓存
 _wbi_cache: tuple[str, str, float] | None = None
 
+# WBI 缓存 TTL（秒）
+_WBI_CACHE_TTL: float = 1800.0       # 成功时缓存 30 分钟
+_WBI_FAIL_CACHE_TTL: float = 300.0   # 失败时只缓存 5 分钟，快速恢复
+_WBI_NAV_RETRY_DELAY: float = 2.0    # nav 端点重试前等待
+_WBI_NAV_MAX_RETRIES: int = 1        # nav 端点额外重试次数
+
+# 请求间最小间隔（秒），避免同一 UID 连续请求触发风控
+_MIN_REQUEST_GAP: float = 1.5
+
 # B站 Cookie（硬编码，也可通过环境变量 BILIBILI_COOKIE 覆盖）
 _DEFAULT_COOKIE: str = (
     "buvid3=E8A25E15-F6A9-7B35-078E-FBDC9D92E5C579886infoc; "
@@ -54,20 +64,22 @@ _DEFAULT_COOKIE: str = (
     "CURRENT_QUALITY=0; "
     "rpdid=|(umYmmll)J~0J'u~)||lukJ~; "
     "theme-switch-show=SHOWED; "
-    "CURRENT_FNVAL=2000; "
-    "bp_t_offset_1078666620=1214469777527930880; "
+    "SESSDATA=b2e127f7%2C1798864035%2Cfbad1%2A71CjBJsjKMwwV6eHqKgyzYuNyO1istnboKlwZDNXLBrX77JYW2vBNF0krAVoDPIUKT5DwSVkx2dDQxamVoR19BYTQwcVBxUlZtTGRlVzdUdGVHbWstcHJUc1hzY1E4RHZ2U2dMSmRfM2hXa0NSTHU4ZFJkcjBlMXEwbG1IM09EQTFyTzl4M3YwcXpBIIEC; "
+    "bili_jct=4a35cd6e34b846a5044afbda8c578a82; "
+    "sid=8spkzuhr; "
     "bmg_af_switch=1; "
     "bmg_src_def_domain=i2.hdslb.com; "
     "bmg_af_sc={\"none\":{\"on\":1,\"def\":\"i2.hdslb.com\"},\"sgp\":{\"on\":1,\"def\":\"i2-sgp.hdslb.com\"}}; "
     "bili_ticket=eyJhbGciOiJIUzI1NiIsImtpZCI6InMwMyIsInR5cCI6IkpXVCJ9."
-    "eyJleHAiOjE3ODMwNzE4MTUsImlhdCI6MTc4MjgxMjU1NSwicGx0IjotMX0."
-    "keuaYqkGg_rI4PGiC0uPcIMXIYzpUuuhYoWEBiHgtEw; "
-    "bili_ticket_expires=1783071755; "
-    "SESSDATA=ecab67ea%2C1798364616%2C82431%2A61CjCo49e9qpHmSccU9TV28XeGLbOcwjGjHVaplqzfliZ3ygJx_mMAcj6-5-VfqP5HfEwSVndXRUZJM0lyMldMMmhtMmxuQWNkeFl2WWJHeVBleEl6T2pybU96SmhTV2gxZDNNQk00TmVJMnpwa1g2NFBKZ3dxZ2xSYko4SFBSUzlQWWJNU0lEY1p3IIEC; "
-    "bili_jct=b2505b446532086ef41213f4b2bd9aa8; "
-    "sid=qburvfgk; "
+    "eyJleHAiOjE3ODM3NTYzMDIsImlhdCI6MTc4MzQ5NzA0MiwicGx0IjotMX0."
+    "Ky2Gc2UQsSOJmmpZS7mLpg5Gqo1YU1Ex1BY0U-oOWLQ; "
+    "bili_ticket_expires=1783756242; "
+    "PVID=5; "
+    "CURRENT_FNVAL=4048; "
+    "bp_t_offset_1078666620=1222615015501070336; "
     "home_feed_column=4; "
     "browser_resolution=1357-956; "
+    "b_lsid=2CA7A464_19F44EE2DF8; "
     "b_lsid=BE586282_19F17EACF7F"
 )
 _bilibili_cookie: str = _DEFAULT_COOKIE or os.environ.get("BILIBILI_COOKIE", "")
@@ -110,7 +122,7 @@ def _build_headers(referer: str = "https://www.bilibili.com") -> dict[str, str]:
 async def fetch_bilibili_updates(uid: str = "50329118") -> list[dict[str, Any]]:
     """获取指定 UID 的最新视频投稿。
 
-    优先尝试公开 API，被限频后切换到 WBI 签名接口。
+    优先尝试公开 API，被限频后延迟再切换到 WBI 签名接口。
 
     Returns:
         [{"type":"video","bvid":"BV...","title":"...","description":"...",
@@ -119,6 +131,9 @@ async def fetch_bilibili_updates(uid: str = "50329118") -> list[dict[str, Any]]:
     result = await _fetch_public(uid)
     if result:
         return result
+
+    # 公开 API 失败后加延迟，避免紧随请求触发风控
+    await asyncio.sleep(_MIN_REQUEST_GAP)
 
     result = await _fetch_wbi(uid)
     if result:
@@ -202,55 +217,89 @@ async def _fetch_wbi(uid: str) -> list[dict[str, Any]]:
 
 
 async def _get_wbi_keys() -> tuple[str, str]:
-    """获取 WBI 签名密钥对（30 分钟缓存）。
+    """获取 WBI 签名密钥对（成功缓存 30 分钟，失败缓存 5 分钟）。
 
     如果 nav 端点被风控（-352），返回空字符串，调用方应跳过 WBI 请求。
+    失败时使用更短的 TTL 以便快速重试恢复。
     """
     global _wbi_cache
     now = time_mod.time()
 
-    if _wbi_cache and (now - _wbi_cache[2]) < 1800:
-        return _wbi_cache[0], _wbi_cache[1]
+    if _wbi_cache is not None:
+        cache_age = now - _wbi_cache[2]
+        # 成功缓存（非空密钥）→ 30 分钟有效
+        if _wbi_cache[0] and cache_age < _WBI_CACHE_TTL:
+            return _wbi_cache[0], _wbi_cache[1]
+        # 失败缓存（空密钥）→ 5 分钟有效，之后重试
+        if not _wbi_cache[0] and cache_age < _WBI_FAIL_CACHE_TTL:
+            return "", ""
+        # 失败缓存过期 → 允许重试
+        if not _wbi_cache[0]:
+            logger.debug("[Bilibili] WBI fail cache expired, retrying nav endpoint")
 
-    try:
-        headers = _build_headers("https://www.bilibili.com")
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                "https://api.bilibili.com/x/web-interface/nav",
-                headers=headers,
-            )
-            data = resp.json()
-            code = data.get("code")
+    headers = _build_headers("https://www.bilibili.com")
 
-            if code == -352:
-                logger.warning(
-                    "[Bilibili] ⚠️ nav 端点风控 (-352)，无法获取 WBI 密钥。"
-                    "请配置 bilibili_cookie 后重试。"
+    last_error = ""
+    for attempt in range(_WBI_NAV_MAX_RETRIES + 1):
+        if attempt > 0:
+            await asyncio.sleep(_WBI_NAV_RETRY_DELAY)
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    "https://api.bilibili.com/x/web-interface/nav",
+                    headers=headers,
                 )
-                _wbi_cache = ("", "", now)
-                return "", ""
+                data = resp.json()
+                code = data.get("code")
 
-            if code != 0 or "data" not in data:
-                logger.debug(f"[Bilibili] nav API error {code}: {data.get('message')}")
-                _wbi_cache = ("", "", now)
-                return "", ""
+                if code == -352:
+                    last_error = "风控拦截 (-352)"
+                    if attempt < _WBI_NAV_MAX_RETRIES:
+                        logger.debug(
+                            f"[Bilibili] nav 端点 -352，第 {attempt + 1} 次重试..."
+                        )
+                        continue
+                    logger.warning(
+                        "[Bilibili] ⚠️ nav 端点风控 (-352)，无法获取 WBI 密钥。"
+                        "请配置有效的 bilibili_cookie 后重试。"
+                    )
+                    _wbi_cache = ("", "", now)
+                    return "", ""
 
-            wbi = data["data"].get("wbi_img", {})
-            if not wbi:
-                logger.debug("[Bilibili] nav API 未返回 wbi_img")
-                _wbi_cache = ("", "", now)
-                return "", ""
+                if code != 0 or "data" not in data:
+                    last_error = f"API error {code}: {data.get('message')}"
+                    if attempt < _WBI_NAV_MAX_RETRIES:
+                        logger.debug(f"[Bilibili] nav {last_error}，重试中...")
+                        continue
+                    logger.debug(f"[Bilibili] nav {last_error}")
+                    _wbi_cache = ("", "", now)
+                    return "", ""
 
-            img_key = wbi["img_url"].rsplit("/", 1)[1].split(".")[0]
-            sub_key = wbi["sub_url"].rsplit("/", 1)[1].split(".")[0]
+                wbi = data["data"].get("wbi_img", {})
+                if not wbi:
+                    logger.debug("[Bilibili] nav API 未返回 wbi_img")
+                    _wbi_cache = ("", "", now)
+                    return "", ""
 
-        _wbi_cache = (img_key, sub_key, now)
-        return img_key, sub_key
+                img_key = wbi["img_url"].rsplit("/", 1)[1].split(".")[0]
+                sub_key = wbi["sub_url"].rsplit("/", 1)[1].split(".")[0]
 
-    except Exception as e:
-        logger.debug(f"[Bilibili] nav API exception: {e}")
-        _wbi_cache = ("", "", now)
-        return "", ""
+            _wbi_cache = (img_key, sub_key, now)
+            logger.debug("[Bilibili] WBI keys refreshed successfully")
+            return img_key, sub_key
+
+        except Exception as e:
+            last_error = str(e)
+            if attempt < _WBI_NAV_MAX_RETRIES:
+                logger.debug(f"[Bilibili] nav 网络异常，重试: {e}")
+                continue
+            logger.debug(f"[Bilibili] nav API exception: {e}")
+
+    # 所有重试耗尽 → 失败缓存（短 TTL）
+    logger.warning(f"[Bilibili] nav 端点不可用 ({last_error})，{_WBI_FAIL_CACHE_TTL}s 后重试")
+    _wbi_cache = ("", "", now)
+    return "", ""
 
 
 def _parse_vlist(data: dict) -> list[dict[str, Any]]:

@@ -10,7 +10,7 @@ from typing import Any
 
 from .bilibili import fetch_bilibili_dynamics
 
-# BLG 电子竞技俱乐部 UID（新）
+# BLG 电子竞技俱乐部 UID
 BLG_UID = "268999208"
 
 
