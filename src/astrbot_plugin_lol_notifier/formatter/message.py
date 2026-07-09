@@ -638,7 +638,7 @@ def format_series(raw: Any, limit: int = 10) -> str:
         return "📋 暂无系列赛数据。"
     lines = ["🏆 **系列赛列表**", ""]
     for s in items[:limit]:
-        name = s.get("name", s.get("full_name", "?"))
+        name = s.get("name") or s.get("full_name") or "?"
         season = s.get("season", "")
         begin = s.get("begin_at", "")[:10]
         end = s.get("end_at", "")[:10]
