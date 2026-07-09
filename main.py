@@ -100,13 +100,14 @@ _LEAGUE_SET = frozenset({
 def _parse_match_args(args: list[str]) -> tuple[str, str, str]:
     """智能解析 match 命令参数，识别 match ID / round 数字。
 
+    /lol result → ("", "regular", "last")  — 空 league 表示自动探测 LPL+LCK
     /lol result LPL → ("lpl", "regular", "last")
     /lol result LPL 115616219464607521 → ("lpl", "regular", "115616219464607521")
     /lol result LPL regular 3 → ("lpl", "regular", "3")
     /lol result LPL playoff → ("lpl", "playoff", "last")
     """
     if not args:
-        return ("lpl", "regular", "last")
+        return ("", "regular", "last")
     league = args[0]
     if len(args) == 1:
         return (league, "regular", "last")
@@ -228,7 +229,7 @@ class LoLNotifierPlugin(Star):
                     yield m
 
             elif sub_cmd == "next":
-                league = args[0] if len(args) > 0 else "lpl"
+                league = args[0] if len(args) > 0 else ""
                 stage = args[1] if len(args) > 1 else "regular"
                 season = args[2] if len(args) > 2 else "current"
                 async for m in _result(self._handle_next(event, league, stage, season)):
@@ -482,7 +483,46 @@ class LoLNotifierPlugin(Star):
                 yield msg
 
     async def _handle_next(self, event, league, stage, season):
+        """处理 /lol next 命令（纯文本输出）。
+
+        - 未指定联赛时，依次查询 MSI → Worlds → LPL → LCK，
+          返回第一个有未开始/进行中比赛的联赛的下一场；
+          全部没有则提示休赛期。
+        - 指定联赛时，仅查询该联赛。
+        """
+        if not league.strip():
+            yield await self._handle_next_auto(event, stage, season)
+            return
+
         result = await api.get_schedule(league, stage, season)
+        yield await self._format_next_result(event, result, league, stage, season)
+
+    async def _handle_next_auto(self, event, stage, season):
+        """无联赛参数时，自动探测 MSI/Worlds/LPL/LCK 的下一场比赛。"""
+        _PRIORITY_LEAGUES = ["msi", "worlds", "lpl", "lck"]
+
+        for lg in _PRIORITY_LEAGUES:
+            result = await api.get_schedule(lg, stage, season)
+            if not result.ok or not result.value:
+                continue
+            unstarted = [m for m in result.value if m.status in ("unstarted", "")]
+            in_progress = [m for m in result.value if m.status in ("in_progress", "live")]
+            if unstarted:
+                unstarted.sort(key=lambda m: (m.start_date, m.start_time))
+                text = fmt.format_schedule([unstarted[0]], limit=1)
+                text = text.replace("📅 LoL 近期赛程", f"⏭️ 下一场比赛 · {lg.upper()}")
+                yield event.plain_result(text)
+                return
+            if in_progress:
+                text = fmt.format_schedule([in_progress[0]], limit=1)
+                text = text.replace("📅 LoL 近期赛程", f"🔴 正在比赛 · {lg.upper()}")
+                yield event.plain_result(text)
+                return
+
+        yield event.plain_result("📅 现在是休赛期，暂无比赛。")
+
+    async def _format_next_result(self, event, result, league, stage, season):
+        """将 get_schedule 结果格式化为 next 文本（纯文本）。"""
         match result:
             case Success(value=schedule) if schedule:
                 unstarted = [m for m in schedule if m.status in ("unstarted", "")]
@@ -500,8 +540,7 @@ class LoLNotifierPlugin(Star):
                         fm, fl = fallback
                         text = fmt.format_schedule([fm], limit=1)
                         text = text.replace("📅 LoL 近期赛程", f"⏭️ 下一场比赛（{league.upper()}暂无未来赛程，最近是 {fl.upper()}）")
-                        image_path = await img.render_schedule([fm], limit=1)
-                        yield await self._render_or_text(event, text, image_path)
+                        yield event.plain_result(text)
                         return
                     completed = [m for m in schedule if m.status in ("completed", "finished")]
                     if completed:
@@ -516,17 +555,15 @@ class LoLNotifierPlugin(Star):
                     text = text.replace("📅 LoL 近期赛程", "📅 最近一场比赛（暂无未来赛程）")
                 else:
                     text = fmt.format_schedule([next_match], limit=1)
-                    text = text.replace("📅 LoL 近期赛程", "⏭️ 下一场比赛")
-                image_path = await img.render_schedule([next_match], limit=1)
-                yield await self._render_or_text(event, text, image_path)
+                    text = text.replace("📅 LoL 近期赛程", f"⏭️ 下一场比赛 · {league.upper()}")
+                yield event.plain_result(text)
             case Success():
                 fallback = await self._find_next_in_other_leagues(league, stage, season)
                 if fallback is not None:
                     fm, fl = fallback
                     text = fmt.format_schedule([fm], limit=1)
                     text = text.replace("📅 LoL 近期赛程", f"⏭️ 下一场比赛（{league.upper()}暂无赛程，最近是 {fl.upper()}）")
-                    image_path = await img.render_schedule([fm], limit=1)
-                    yield await self._render_or_text(event, text, image_path)
+                    yield event.plain_result(text)
                     return
                 yield event.plain_result("📅 当前没有可显示的赛程信息。")
             case Failure(error=err):
@@ -567,7 +604,25 @@ class LoLNotifierPlugin(Star):
                 yield event.plain_result(f"❌ 获取实时比赛数据失败：{err}")
 
     async def _handle_result(self, event, league, stage, round_num):
+        """处理 /lol result 命令。
+
+        未指定联赛时，同时查询 LPL 和 LCK 的最新赛果。
+        """
         round_arg: int | str = int(round_num) if round_num.isdigit() else "last"
+
+        if not league.strip():
+            # 默认同时查 LPL + LCK
+            parts: list[str] = []
+            for lg in ("lpl", "lck"):
+                result = await api.get_match_result(lg, stage, round_arg)
+                if result.ok and result.value is not None:
+                    parts.append(fmt.format_match_basic(result.value))
+            if parts:
+                yield event.plain_result("\n\n".join(parts))
+            else:
+                yield event.plain_result("⏳ LPL / LCK 暂无最新比赛结果，请比赛结束后再试。")
+            return
+
         result = await api.get_match_result(league, stage, round_arg)
         if result.ok and result.value is not None:
             yield event.plain_result(fmt.format_match_basic(result.value))

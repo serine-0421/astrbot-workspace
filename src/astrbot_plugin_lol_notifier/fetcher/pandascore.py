@@ -624,19 +624,32 @@ async def fetch_tournament_matches(
 # ── 战队 ──
 
 async def fetch_teams(league: str = "", page: int = 1) -> JsonListResult:
-    """获取战队列表 GET /lol/teams"""
-    params: dict[str, Any] = {"page": page, "per_page": 100}
+    """获取战队列表 GET /lol/teams，自动翻页获取全部结果。"""
+    params: dict[str, Any] = {"page": 1, "per_page": 100}
     if league:
         lid = await _resolve_league_id(league)
         if lid is not None:
             params["filter[league_id]"] = lid
         else:
             return Failure(error=f"不支持的赛区: {league}，可用: {supported_leagues()}")
-    result = await _ps_call("/lol/teams", params)
-    if not result.ok:
-        return Failure(error=result.error)
-    data = result.value.get("data", []) if isinstance(result.value, dict) else []
-    return Success(value=data)
+
+    all_teams: list[dict] = []
+    current_page = 1
+    while True:
+        params["page"] = current_page
+        result = await _ps_call("/lol/teams", params)
+        if not result.ok:
+            return Failure(error=result.error)
+        data = result.value.get("data", []) if isinstance(result.value, dict) else []
+        if not data:
+            break
+        all_teams.extend(data)
+        # 如果返回数少于 per_page，说明已是最后一页
+        if len(data) < 100:
+            break
+        current_page += 1
+
+    return Success(value=all_teams)
 
 
 async def fetch_team(team_id: str) -> JsonResult:
