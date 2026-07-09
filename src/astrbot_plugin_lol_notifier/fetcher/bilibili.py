@@ -43,7 +43,6 @@ _wbi_cache: tuple[str, str, float] | None = None
 
 # WBI 缓存 TTL（秒）
 _WBI_CACHE_TTL: float = 1800.0       # 成功时缓存 30 分钟
-_WBI_FAIL_CACHE_TTL: float = 300.0   # 失败时只缓存 5 分钟，快速恢复
 _WBI_NAV_RETRY_DELAY: float = 2.0    # nav 端点重试前等待
 _WBI_NAV_MAX_RETRIES: int = 1        # nav 端点额外重试次数
 
@@ -217,25 +216,17 @@ async def _fetch_wbi(uid: str) -> list[dict[str, Any]]:
 
 
 async def _get_wbi_keys() -> tuple[str, str]:
-    """获取 WBI 签名密钥对（成功缓存 30 分钟，失败缓存 5 分钟）。
+    """获取 WBI 签名密钥对（成功缓存 30 分钟，失败不缓存以允许其他账号独立重试）。
 
     如果 nav 端点被风控（-352），返回空字符串，调用方应跳过 WBI 请求。
-    失败时使用更短的 TTL 以便快速重试恢复。
+    失败不做全局缓存，避免一个账号的风控导致其他账号也无法使用 WBI 回退。
     """
     global _wbi_cache
     now = time_mod.time()
 
-    if _wbi_cache is not None:
-        cache_age = now - _wbi_cache[2]
-        # 成功缓存（非空密钥）→ 30 分钟有效
-        if _wbi_cache[0] and cache_age < _WBI_CACHE_TTL:
-            return _wbi_cache[0], _wbi_cache[1]
-        # 失败缓存（空密钥）→ 5 分钟有效，之后重试
-        if not _wbi_cache[0] and cache_age < _WBI_FAIL_CACHE_TTL:
-            return "", ""
-        # 失败缓存过期 → 允许重试
-        if not _wbi_cache[0]:
-            logger.debug("[Bilibili] WBI fail cache expired, retrying nav endpoint")
+    # 仅使用成功缓存（非空密钥且在 TTL 内）
+    if _wbi_cache is not None and _wbi_cache[0] and (now - _wbi_cache[2]) < _WBI_CACHE_TTL:
+        return _wbi_cache[0], _wbi_cache[1]
 
     headers = _build_headers("https://www.bilibili.com")
 
@@ -264,7 +255,6 @@ async def _get_wbi_keys() -> tuple[str, str]:
                         "[Bilibili] ⚠️ nav 端点风控 (-352)，无法获取 WBI 密钥。"
                         "请配置有效的 bilibili_cookie 后重试。"
                     )
-                    _wbi_cache = ("", "", now)
                     return "", ""
 
                 if code != 0 or "data" not in data:
@@ -273,13 +263,11 @@ async def _get_wbi_keys() -> tuple[str, str]:
                         logger.debug(f"[Bilibili] nav {last_error}，重试中...")
                         continue
                     logger.debug(f"[Bilibili] nav {last_error}")
-                    _wbi_cache = ("", "", now)
                     return "", ""
 
                 wbi = data["data"].get("wbi_img", {})
                 if not wbi:
                     logger.debug("[Bilibili] nav API 未返回 wbi_img")
-                    _wbi_cache = ("", "", now)
                     return "", ""
 
                 img_key = wbi["img_url"].rsplit("/", 1)[1].split(".")[0]
@@ -296,9 +284,8 @@ async def _get_wbi_keys() -> tuple[str, str]:
                 continue
             logger.debug(f"[Bilibili] nav API exception: {e}")
 
-    # 所有重试耗尽 → 失败缓存（短 TTL）
-    logger.warning(f"[Bilibili] nav 端点不可用 ({last_error})，{_WBI_FAIL_CACHE_TTL}s 后重试")
-    _wbi_cache = ("", "", now)
+    # 所有重试耗尽 → 不缓存失败，下次调用可独立重试
+    logger.warning(f"[Bilibili] nav 端点不可用 ({last_error})，下次调用将重试")
     return "", ""
 
 

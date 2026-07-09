@@ -688,9 +688,14 @@ class LoLNotifierPlugin(Star):
         """产出 B站 三账号综合动态摘要。"""
         parts: list[str] = []
 
-        for account in BILIBILI_ACCOUNTS:
+        accounts = list(BILIBILI_ACCOUNTS)
+        for i, account in enumerate(accounts):
             uid = account["uid"]
             name = account["name"]
+
+            # 账号间延迟，避免连续请求触发风控
+            if i > 0:
+                await asyncio.sleep(3.0)
 
             # ── 视频 ──
             videos = await bili_fetcher.fetch_bilibili_updates(uid)
@@ -699,6 +704,9 @@ class LoLNotifierPlugin(Star):
                 for v in videos[:3]:
                     lines.append(f"  ▸ {v.get('title','')}  {v.get('url','')}")
                 parts.append("\n".join(lines))
+            else:
+                # 视频抓取为空时给出提示（可能是风控/限频/无投稿）
+                parts.append(f"📺 **{name}**  · 视频（暂无法获取，可能被限频）")
 
             # ── 图文动态 ──
             dynamics = await bili_fetcher.fetch_bilibili_dynamics(uid)
