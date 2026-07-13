@@ -708,20 +708,6 @@ async def fetch_player_stats(player_id: str) -> JsonResult:
     return await _ps_call(f"/lol/players/{player_id}/stats")
 
 
-# ═══════════════════════════════════════════════════
-#  Games（对局）
-# ═══════════════════════════════════════════════════
-
-async def fetch_game_detail(game_id: str) -> JsonResult:
-    """获取单局详情 GET /lol/games/{id}"""
-    return await _ps_call(f"/lol/games/{game_id}")
-
-
-async def fetch_game_events(game_id: str) -> JsonResult:
-    """获取对局事件 GET /lol/games/{id}/events"""
-    return await _ps_call(f"/lol/games/{game_id}/events")
-
-
 def _ps_game_to_brief_match(game: dict) -> LeagueMatch | None:
     """将 /lol/games 返回的 game 对象转为简要 LeagueMatch。"""
     try:
@@ -938,117 +924,6 @@ async def fetch_daily_matches_multi_league(
     return Success(value=matches)
 
 
-# ═══════════════════════════════════════════════════
-#  Champions — 英雄
-# ═══════════════════════════════════════════════════
-
-async def fetch_champions(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
-    """GET /lol/champions"""
-    params: dict[str, Any] = {"page": page, "per_page": per_page}
-    if version:
-        params["filter[videogame_version]"] = version
-    return await _ps_call("/lol/champions", params)
-
-
-async def fetch_champion(champion_id: int | str) -> JsonResult:
-    """GET /lol/champions/{id}"""
-    return await _ps_call(f"/lol/champions/{champion_id}")
-
-
-# ═══════════════════════════════════════════════════
-#  Items — 装备
-# ═══════════════════════════════════════════════════
-
-async def fetch_items(version: str = "", page: int = 1, per_page: int = 50) -> JsonResult:
-    """GET /lol/items"""
-    params: dict[str, Any] = {"page": page, "per_page": per_page}
-    if version:
-        params["filter[videogame_version]"] = version
-    return await _ps_call("/lol/items", params)
-
-
-async def fetch_item(item_id: int | str) -> JsonResult:
-    """GET /lol/items/{id}"""
-    return await _ps_call(f"/lol/items/{item_id}")
-
-
-# ═══════════════════════════════════════════════════
-#  Masteries — 天赋
-# ═══════════════════════════════════════════════════
-
-async def fetch_masteries(page: int = 1, per_page: int = 50) -> JsonResult:
-    """GET /lol/masteries"""
-    return await _ps_call("/lol/masteries", {"page": page, "per_page": per_page})
-
-
-async def fetch_mastery(mastery_id: int | str) -> JsonResult:
-    """GET /lol/masteries/{id}"""
-    return await _ps_call(f"/lol/masteries/{mastery_id}")
-
-
-# ═══════════════════════════════════════════════════
-#  Runes — 符文
-# ═══════════════════════════════════════════════════
-
-async def fetch_runes(page: int = 1, per_page: int = 50) -> JsonResult:
-    """GET /lol/runes"""
-    return await _ps_call("/lol/runes", {"page": page, "per_page": per_page})
-
-
-async def fetch_rune(rune_id: int | str) -> JsonResult:
-    """GET /lol/runes/{id}"""
-    return await _ps_call(f"/lol/runes/{rune_id}")
-
-
-async def fetch_runes_reforged() -> JsonResult:
-    """GET /lol/runes-reforged"""
-    return await _ps_call("/lol/runes-reforged", {"per_page": 100})
-
-
-async def fetch_rune_reforged(rune_id: int | str) -> JsonResult:
-    """GET /lol/runes-reforged/{id}"""
-    return await _ps_call(f"/lol/runes-reforged/{rune_id}")
-
-
-async def fetch_rune_paths() -> JsonResult:
-    """GET /lol/runes-reforged-paths"""
-    return await _ps_call("/lol/runes-reforged-paths")
-
-
-async def fetch_rune_path(path_id: int | str) -> JsonResult:
-    """GET /lol/runes-reforged-paths/{id}"""
-    return await _ps_call(f"/lol/runes-reforged-paths/{path_id}")
-
-
-# ═══════════════════════════════════════════════════
-#  Spells — 召唤师技能
-# ═══════════════════════════════════════════════════
-
-async def fetch_spells(page: int = 1, per_page: int = 50) -> JsonResult:
-    """GET /lol/spells"""
-    return await _ps_call("/lol/spells", {"page": page, "per_page": per_page})
-
-
-async def fetch_spell(spell_id: int | str) -> JsonResult:
-    """GET /lol/spells/{id}"""
-    return await _ps_call(f"/lol/spells/{spell_id}")
-
-
-# ═══════════════════════════════════════════════════
-#  Games — 对局扩展
-# ═══════════════════════════════════════════════════
-
-async def fetch_match_games(match_id: int | str) -> JsonResult:
-    """GET /lol/matches/{id}/games"""
-    return await _ps_call(f"/lol/matches/{match_id}/games")
-
-
-async def fetch_game_frames(game_id: int | str) -> JsonResult:
-    """GET /lol/games/{id}/frames"""
-    return await _ps_call(f"/lol/games/{game_id}/frames")
-
-
-# ═══════════════════════════════════════════════════
 #  Series — 系列赛（扩展）
 # ═══════════════════════════════════════════════════
 

@@ -1,7 +1,7 @@
 """AstrBot plugin: LoL Notifier
 
 Provides LoL esports push notifications and on-demand query commands.
-Data: PandaScore.
+Data: PandaScore + Bilibili.
 
 Commands (prefix /lol):
     /lol help
@@ -12,14 +12,10 @@ Commands (prefix /lol):
     /lol standings [league]
     /lol today [league]
     /lol team info [name]
-    /lol champions [version]   | champion <id>
-    /lol items [version]        | item <id>
-    /lol spells    | spell <id>
-    /lol runes [paths|path <id>]  | rune <id>
     /lol series [league] [status]
     /lol tournaments [league] [status]
     /lol players [league]   | player <id>
-    /lol bilibili | weibo
+    /lol bilibili
     /lol subscribe | unsubscribe | test
 
 League: lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
@@ -39,8 +35,7 @@ import astrbot.api.message_components as Comp
 
 from .src.astrbot_plugin_lol_notifier.fetcher import api
 from .src.astrbot_plugin_lol_notifier.fetcher import bilibili as bili_fetcher
-from .src.astrbot_plugin_lol_notifier.fetcher import weibo as weibo_fetcher
-from .src.astrbot_plugin_lol_notifier.config import get_weibo_uids, BILIBILI_ACCOUNTS
+from .src.astrbot_plugin_lol_notifier.config import BILIBILI_ACCOUNTS
 from .src.astrbot_plugin_lol_notifier import formatter as fmt
 from .src.astrbot_plugin_lol_notifier import image_renderer as img
 from .src.astrbot_plugin_lol_notifier.models import Failure, Success
@@ -66,21 +61,8 @@ HELP_TEXT = """🎮 LoL Notifier 指令列表
   /lol series [league] [status]    系列赛列表
   /lol tournaments [league] [status] 锦标赛列表
 
-━━━ 参考数据 ━━━
-  /lol champions [version]    英雄列表
-  /lol champion <id>          单个英雄
-  /lol items [version]        装备列表
-  /lol item <id>              单个装备
-  /lol spells                 召唤师技能
-  /lol spell <id>             单个技能
-  /lol runes                  符文列表
-  /lol rune <id>              单个符文
-  /lol runes paths            符文系列表
-  /lol runes path <id>        单个符文系
-
-━━━ B站 / 微博 ━━━
+━━━ B站 ━━━
   /lol bilibili               B站综合动态
-  /lol weibo                   微博赛前海报
 
 ━━━ 赛区 ━━━
   lck lpl lec lcs lco lcl ljl pcs vcs cblol lla tcl msi worlds
@@ -277,76 +259,6 @@ class LoLNotifierPlugin(Star):
 
             elif sub_cmd == "bilibili":
                 async for m in _result(self._handle_bilibili(event)):
-                    yield m
-
-            elif sub_cmd == "weibo":
-                async for m in _result(self._handle_weibo(event)):
-                    yield m
-
-            elif sub_cmd == "champions":
-                version = args[0] if len(args) > 0 else ""
-                async for m in _result(self._handle_champions(event, version)):
-                    yield m
-
-            elif sub_cmd == "champion":
-                cid = args[0] if len(args) > 0 else ""
-                if cid:
-                    async for m in _result(self._handle_champion(event, cid)):
-                        yield m
-                else:
-                    yield event.plain_result("❌ 用法: /lol champion <id_or_slug>")
-
-            elif sub_cmd == "items":
-                version = args[0] if len(args) > 0 else ""
-                async for m in _result(self._handle_items(event, version)):
-                    yield m
-
-            elif sub_cmd == "item":
-                iid = args[0] if len(args) > 0 else ""
-                if iid:
-                    async for m in _result(self._handle_item(event, iid)):
-                        yield m
-                else:
-                    yield event.plain_result("❌ 用法: /lol item <id_or_slug>")
-
-            elif sub_cmd == "spells":
-                async for m in _result(self._handle_spells(event)):
-                    yield m
-
-            elif sub_cmd == "spell":
-                sid = args[0] if len(args) > 0 else ""
-                if sid:
-                    async for m in _result(self._handle_spell(event, sid)):
-                        yield m
-                else:
-                    yield event.plain_result("❌ 用法: /lol spell <id>")
-
-            elif sub_cmd == "runes":
-                sub2 = args[0].lower() if len(args) > 0 else "list"
-                if sub2 == "paths":
-                    async for m in _result(self._handle_rune_paths(event)):
-                        yield m
-                elif sub2 == "path":
-                    pid = args[1] if len(args) > 1 else ""
-                    if pid:
-                        async for m in _result(self._handle_rune_path(event, pid)):
-                            yield m
-                    else:
-                        yield event.plain_result("❌ 用法: /lol runes path <id>")
-                else:
-                    async for m in _result(self._handle_runes(event)):
-                        yield m
-
-            elif sub_cmd == "rune":
-                rid = args[0] if len(args) > 0 else ""
-                if rid:
-                    async for m in _result(self._handle_rune(event, rid)):
-                        yield m
-                else:
-                    yield event.plain_result("❌ 用法: /lol rune <id>")
-
-            elif sub_cmd == "masteries":
-                async for m in _result(self._handle_masteries(event)):
                     yield m
 
             elif sub_cmd == "series":
@@ -789,110 +701,6 @@ class LoLNotifierPlugin(Star):
             return
 
         yield event.plain_result("\n\n".join(parts))
-
-    async def _handle_weibo(self, event):
-        try:
-            uid_list = get_weibo_uids(self.config)
-            items = await weibo_fetcher.fetch_weibo_posters(uid_list)
-        except Exception as e:
-            yield event.plain_result(f"❌ 微博查询失败: {e}")
-            return
-        if not items:
-            yield event.plain_result("📢 暂未发现相关赛前海报。")
-            return
-        yield event.plain_result(fmt.format_weibo_poster(items[:5]))
-
-    # ═══════════════════════════════════════════════
-    #  参考数据 — Champions / Items / Spells / Runes / Masteries
-    # ═══════════════════════════════════════════════
-
-    async def _handle_champions(self, event, version: str):
-        result = await api.get_champions(version or "")
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_champions(data, limit=15))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_champion(self, event, cid: str):
-        result = await api.get_champion(cid)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_champions([data], limit=1))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_items(self, event, version: str):
-        result = await api.get_items(version or "")
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_items(data, limit=15))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_item(self, event, iid: str):
-        result = await api.get_item(iid)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_items([data], limit=1))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_spells(self, event):
-        result = await api.get_spells()
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_spells(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_spell(self, event, sid: str):
-        result = await api.get_spell(sid)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_spells([data]))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_runes(self, event):
-        result = await api.get_runes()
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_runes(data, limit=25))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_rune_paths(self, event):
-        result = await api.get_rune_paths()
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_rune_paths(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_rune(self, event, rune_id: str):
-        result = await api.get_rune(rune_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_runes(data, limit=1))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_rune_path(self, event, path_id: str):
-        result = await api.get_rune_path(path_id)
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_rune_paths(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
-
-    async def _handle_masteries(self, event):
-        result = await api.get_masteries()
-        match result:
-            case Success(value=data):
-                yield event.plain_result(fmt.format_masteries(data))
-            case Failure(error=err):
-                yield event.plain_result(f"❌ {err}")
 
     # ═══════════════════════════════════════════════
     #  选手 & 战队统计

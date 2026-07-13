@@ -2,14 +2,13 @@
 
 推送场景：
   1. B站 哔哩哔哩英雄联盟赛事 (UID 50329118) → 视频更新
-  2. 微博 英雄联盟赛事 (UID 6537214902) → 赛前海报 (LPL+预告关键词)
-  3. B站 BLG电子竞技俱乐部 (UID 268999208) → BP图文动态
-  4. 距比赛日 ≤ 24h → 赛程 + 对阵表 + 海报
-  5. 赛前 30min → 首发名单 + 交手记录 + 预测
-  6. 每小局 BP 结束 → 阵容名单
-  7. 每小局结束 → 胜负 + 战报
-  8. 比赛结束 → 最终比分 + MVP + 回放
-  9. 淘汰赛关键节点 → 晋级/淘汰
+  2. B站 BLG电子竞技俱乐部 (UID 268999208) → BP图文动态
+  3. 距比赛日 ≤ 24h → 赛程 + 对阵表
+  4. 赛前 30min → 首发名单 + 交手记录 + 预测
+  5. 每小局 BP 结束 → 阵容名单
+  6. 每小局结束 → 胜负 + 战报
+  7. 比赛结束 → 最终比分 + MVP + 回放
+  8. 淘汰赛关键节点 → 晋级/淘汰
 """
 
 from __future__ import annotations
@@ -27,17 +26,15 @@ from astrbot.api.message_components import Image, Plain
 from . import image_renderer as img
 from .config import (
     BILIBILI_ACCOUNTS,
-    get_weibo_uids,
     is_bilibili_push_enabled,
     is_any_bilibili_push_enabled,
-    is_weibo_poster_push_enabled,
     is_daily_schedule_enabled,
     is_pre_match_reminder_enabled,
     get_schedule_push_time,
     get_schedule_leagues,
 )
 from .fetcher import api as fetcher_api
-from .fetcher import bilibili, weibo
+from .fetcher import bilibili
 from .formatter import message as formatter
 from .models import Failure, LeagueMatch, LiveMatch, Success
 from .state import NotificationState, default_state
@@ -153,7 +150,6 @@ class LoLScheduler:
             "bilibili_video_seen": {k: list(v) for k, v in self._state.bilibili_video_seen.items()},
             "bilibili_dynamic_seen": {k: list(v) for k, v in self._state.bilibili_dynamic_seen.items()},
             "bilibili_live_state": self._state.bilibili_live_state,
-            "weibo_updates": list(self._state.weibo_updates),
         }
         await self._star.put_kv_data("lol_state", state_dict)
 
@@ -186,11 +182,8 @@ class LoLScheduler:
 
         # ═══ 第三方平台推送 ═══
 
-        # 1. B站多账号 → 视频+图文动态 (per-account per-type toggle)
+        # B站多账号 → 视频+图文动态 (per-account per-type toggle)
         await self._check_bilibili_feeds()
-
-        # 2. 微博 英雄联盟赛事 (UID 6537214902) → 赛前海报 (LPL+预告)
-        await self._check_weibo_posters()
 
     async def _broadcast(self, text: str, image_path: str | None = None) -> None:
         """广播消息到所有订阅者。
@@ -240,16 +233,11 @@ class LoLScheduler:
             
             time_until = (match_time - now).total_seconds()
             if 0 < time_until <= 86400:  # 24小时内
-                # 获取海报
-                uids = get_weibo_uids(self._config)
-                posters = await weibo.fetch_weibo_posters(uids) if uids else []
-                poster_text = "\n".join([p.get("url", "") for p in posters[:2]]) if posters else ""
-                
                 text = formatter.format_pre_match_preview(
                     match,
                     history=None,
                     prediction=None,
-                    posters=poster_text
+                    posters=""
                 )
                 text = f"⏰ 距离比赛开始不到 24 小时！\n\n{text}"
                 
@@ -275,16 +263,11 @@ class LoLScheduler:
             
             time_until = (match_time - now).total_seconds()
             if 0 < time_until <= 1800:  # 30分钟内
-                # 获取海报
-                uids = get_weibo_uids(self._config)
-                posters = await weibo.fetch_weibo_posters(uids) if uids else []
-                poster_text = "\n".join([p.get("url", "") for p in posters[:2]]) if posters else ""
-                
                 text = formatter.format_pre_match_preview(
                     match,
                     history="历史交手数据尚未接入",
                     prediction="赛前预测数据尚未接入",
-                    posters=poster_text
+                    posters=""
                 )
                 
                 await self._broadcast(text, None)
@@ -515,37 +498,6 @@ class LoLScheduler:
                     await self._persist_state()
         except Exception as e:
             logger.error(f"[LoLNotifier] Error checking B站 live for {name}: {e}")
-
-    # ── 微博赛前海报 ──
-
-    async def _check_weibo_posters(self) -> None:
-        """微博 英雄联盟赛事 (UID 6537214902)：检测 LPL+预告 赛前海报并推送"""
-        if not is_weibo_poster_push_enabled(self._config):
-            return
-
-        try:
-            uids = get_weibo_uids(self._config)
-            if not uids:
-                return
-
-            posters = await weibo.fetch_weibo_posters(uids)
-            if not posters:
-                return
-
-            new_posters = []
-            for post in posters:
-                post_id = str(post.get("id") or post.get("mid", ""))
-                if post_id and post_id not in self._state.weibo_updates:
-                    new_posters.append(post)
-                    self._state.weibo_updates.add(post_id)
-
-            if new_posters:
-                text = formatter.format_weibo_poster(new_posters)
-                await self._broadcast(text, None)
-                await self._persist_state()
-                logger.info(f"[LoLNotifier] Sent {len(new_posters)} weibo poster(s)")
-        except Exception as e:
-            logger.error(f"[LoLNotifier] Error checking weibo posters: {e}")
 
     # ── 赛事节点 ──
 

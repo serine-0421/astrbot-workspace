@@ -47,20 +47,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # ── B站: 多账号推送开关（由 _gen_bilibili_defaults 生成） ──
     **_gen_bilibili_defaults(),
     "bilibili_check_interval": 60,
-    # ── 微博: 英雄联盟赛事 (UID 6537214902)（海报推送） ──
-    "weibo_uids": [
-        "6537214902",  # 英雄联盟赛事
-    ],
-    "weibo_check_interval": 300,
-    "enable_weibo_poster_push": True,
     # ── 保守字段（保留兼容） ──
     "enable_bilibili_updates": True,
-    "enable_weibo_updates": True,
     "enable_bilibili_live": False,
     "enable_bilibili_comments": False,
-    "weibo_filter_repost": False,
-    "weibo_blacklist": [],
-    "weibo_whitelist": [],
 }
 
 
@@ -89,16 +79,6 @@ def is_any_bilibili_push_enabled(config: Any) -> bool:
             if is_bilibili_push_enabled(config, acct["key"], pt):
                 return True
     return False
-
-
-# ── 微博 ──
-
-def get_weibo_uids(config: Any) -> list[str]:
-    return list(config.get("weibo_uids", DEFAULT_CONFIG["weibo_uids"])) if config else DEFAULT_CONFIG["weibo_uids"]
-
-
-def is_weibo_poster_push_enabled(config: Any) -> bool:
-    return bool(config.get("enable_weibo_poster_push", True)) if config else True
 
 
 # ── 赛程推送 ──

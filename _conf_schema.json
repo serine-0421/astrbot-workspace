@@ -65,24 +65,6 @@
     "hint": "B 站 API 轮询间隔，默认 60 秒。注意不要太短以免触发限频。",
     "default": 60
   },
-  "weibo_uids": {
-    "description": "微博监控账号 UID 列表",
-    "type": "list",
-    "hint": "需要监控的微博账号 UID 列表，用于赛前海报（LPL+预告关键词）推送。",
-    "default": ["6537214902"]
-  },
-  "enable_weibo_poster_push": {
-    "description": "开启微博赛前海报推送",
-    "type": "bool",
-    "hint": "开启后，监控微博账号发布含「LPL」和「预告」关键词的内容时自动推送海报。",
-    "default": true
-  },
-  "weibo_check_interval": {
-    "description": "微博检查间隔（秒）",
-    "type": "int",
-    "hint": "微博 API 轮询间隔，默认 300 秒（5 分钟）。避免被限频。",
-    "default": 300
-  },
   "result_poll_delay": {
     "description": "比赛结果轮询延迟（分钟）",
     "type": "int",

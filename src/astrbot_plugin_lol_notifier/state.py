@@ -23,7 +23,6 @@ class NotificationState:
     bilibili_video_seen: dict[str, set[str]] = field(default_factory=dict)     # uid → {bvid, ...}
     bilibili_dynamic_seen: dict[str, set[str]] = field(default_factory=dict)   # uid → {dynamic_id, ...}
     bilibili_live_state: dict[str, bool] = field(default_factory=dict)          # uid → 已通知开播?
-    weibo_updates: set[str] = field(default_factory=set)  # 微博帖子 ID
 
     def _ensure_sets(self, d: dict[str, list | set]) -> dict[str, set[str]]:
         """将 KV 反序列化后的 list 还原为 set。"""
@@ -35,8 +34,6 @@ class NotificationState:
             val = getattr(self, attr)
             if isinstance(val, dict):
                 setattr(self, attr, self._ensure_sets(val))
-        if isinstance(self.weibo_updates, list):
-            self.weibo_updates = set(self.weibo_updates)
         if isinstance(self.pre_match_10min_notified, list):
             self.pre_match_10min_notified = set(self.pre_match_10min_notified)
 
