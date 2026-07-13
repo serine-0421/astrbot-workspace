@@ -5,8 +5,6 @@
 覆盖功能：
   matches (upcoming/running/past/all), match detail, standings, today,
   live, result, detail, leagues, teams, players,
-  champions, items, spells, runes, masteries,
-  game events, game frames, match games,
   series, tournaments, stats
 
 内置 TTL 缓存以降低 API 调用频率。
